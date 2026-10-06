@@ -262,6 +262,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       avatar: user.avatarUrl ?? '',
+      hasPassword: user.passwordHash !== null,
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
     };

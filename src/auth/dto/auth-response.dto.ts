@@ -22,6 +22,10 @@ export class AuthUserDto {
   @Expose()
   avatar!: string;
 
+  /** `false` for accounts that only ever signed in with Google or GitHub. */
+  @Expose()
+  hasPassword!: boolean;
+
   @Expose()
   @IsoDate()
   createdAt!: string;
