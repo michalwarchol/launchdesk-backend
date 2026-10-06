@@ -8,6 +8,9 @@ import { TaskStep } from '../tasks/entities/task-step.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
 
+const MONTHS_IN_ACTIVITY = 6;
+const LIST_LIMIT = 6;
+
 @Injectable()
 export class DashboardService {
   constructor(
@@ -21,7 +24,7 @@ export class DashboardService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async getStats() {
+  async getStats(now = new Date()) {
     const [assignments, tasks, users, stepCount] = await Promise.all([
       this.assignmentsRepository.find({
         relations: {
@@ -37,21 +40,25 @@ export class DashboardService {
     ]);
 
     const statuses = assignments.map((assignment) =>
-      deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate),
+      deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate, now),
     );
 
     const completed = statuses.filter((status) => status === 'completed').length;
     const overdue = statuses.filter((status) => status === 'overdue').length;
-    const active = statuses.filter((status) => status === 'inProgress').length;
+    const inProgress = statuses.filter((status) => status === 'inProgress').length;
     const notStarted = statuses.filter((status) => status === 'notStarted').length;
+    const active = inProgress + overdue + notStarted;
 
-    const monthlyActivity = this.buildMonthlyActivity(assignments);
+    const unfinished = assignments.filter(
+      (_assignment, index) => statuses[index] !== 'completed',
+    );
+
+    const monthlyActivity = this.buildMonthlyActivity(assignments, now);
     const topTasks = this.buildTopTasks(assignments);
-    const workload = this.buildWorkload(assignments);
-    const upcomingDeadlines = assignments
-      .filter((assignment) => Number(assignment.progress) < 1)
+    const workload = this.buildWorkload(unfinished);
+    const upcomingDeadlines = [...unfinished]
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 5)
+      .slice(0, LIST_LIMIT)
       .map((assignment) => ({
         id: assignment.id,
         taskId: assignment.taskId,
@@ -64,13 +71,11 @@ export class DashboardService {
         })),
         dueDate: assignment.dueDate,
         progress: Number(assignment.progress),
-        status: deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate),
+        status: deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate, now),
       }));
 
     const usersWithActiveWork = new Set(
-      assignments
-        .filter((assignment) => Number(assignment.progress) > 0 && Number(assignment.progress) < 1)
-        .flatMap((assignment) => assignment.assignees.map((assignee) => assignee.userId)),
+      unfinished.flatMap((assignment) => assignment.assignees.map((assignee) => assignee.userId)),
     ).size;
 
     return {
@@ -80,9 +85,13 @@ export class DashboardService {
         overdue,
         active,
         notStarted,
-        completionRate: assignments.length ? completed / assignments.length : 0,
+        completionRate: assignments.length
+          ? Math.round((completed / assignments.length) * 100)
+          : 0,
         tasks: tasks.length,
-        averageStepsPerTask: tasks.length ? stepCount / tasks.length : 0,
+        averageStepsPerTask: tasks.length
+          ? Math.round((stepCount / tasks.length) * 10) / 10
+          : 0,
         users: users.length,
         admins: users.filter((user) => user.role === UserRole.Admin).length,
         usersWithActiveWork,
@@ -90,7 +99,7 @@ export class DashboardService {
       statusBreakdown: [
         { status: 'completed', count: completed },
         { status: 'overdue', count: overdue },
-        { status: 'inProgress', count: active },
+        { status: 'inProgress', count: inProgress },
         { status: 'notStarted', count: notStarted },
       ],
       monthlyActivity,
@@ -100,31 +109,32 @@ export class DashboardService {
     };
   }
 
-  private buildMonthlyActivity(assignments: Assignment[]) {
+  private buildMonthlyActivity(assignments: Assignment[], now: Date) {
     const buckets = new Map<string, { created: number; completed: number }>();
 
+    for (let offset = MONTHS_IN_ACTIVITY - 1; offset >= 0; offset -= 1) {
+      const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+      buckets.set(month.toISOString().slice(0, 7), { created: 0, completed: 0 });
+    }
+
     for (const assignment of assignments) {
-      const createdMonth = assignment.createdAt.toISOString().slice(0, 7);
-      const createdBucket = buckets.get(createdMonth) ?? { created: 0, completed: 0 };
-      createdBucket.created += 1;
-      buckets.set(createdMonth, createdBucket);
+      const createdBucket = buckets.get(assignment.createdAt.toISOString().slice(0, 7));
+
+      if (createdBucket) createdBucket.created += 1;
 
       if (assignment.completedAt) {
-        const completedMonth = assignment.completedAt.slice(0, 7);
-        const completedBucket = buckets.get(completedMonth) ?? { created: 0, completed: 0 };
-        completedBucket.completed += 1;
-        buckets.set(completedMonth, completedBucket);
+        const completedBucket = buckets.get(assignment.completedAt.slice(0, 7));
+
+        if (completedBucket) completedBucket.completed += 1;
       }
     }
 
-    return [...buckets.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([monthKey, counts]) => ({
-        monthKey,
-        monthLabel: monthKey,
-        created: counts.created,
-        completed: counts.completed,
-      }));
+    return [...buckets.entries()].map(([monthKey, counts]) => ({
+      monthKey,
+      monthLabel: monthKey,
+      created: counts.created,
+      completed: counts.completed,
+    }));
   }
 
   private buildTopTasks(assignments: Assignment[]) {
@@ -162,6 +172,6 @@ export class DashboardService {
       }
     }
 
-    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, LIST_LIMIT);
   }
 }
