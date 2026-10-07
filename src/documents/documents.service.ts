@@ -20,6 +20,7 @@ import {
   getExtension,
   isAcceptedExtension,
 } from './utils/file-meta.js';
+import { Directories } from '../storage/utils/directories.js';
 
 const DOCUMENT_SORT_KEYS = ['name', 'type', 'size', 'createdAt'] as const;
 
@@ -71,6 +72,7 @@ export class DocumentsService {
       }
 
       const s3Key = await this.storageService.uploadObject(
+        Directories.Documents,
         file.buffer,
         file.mimetype,
         extension,
