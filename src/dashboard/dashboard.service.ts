@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { Assignment } from '../assignments/entities/assignment.entity.js';
 import { deriveAssignmentStatus } from '../assignments/utils/assignment-status.js';
+import { StorageService } from '../storage/storage.service.js';
 import { TaskStep } from '../tasks/entities/task-step.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
@@ -22,6 +23,7 @@ export class DashboardService {
     private readonly taskStepsRepository: Repository<TaskStep>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly storageService: StorageService,
   ) {}
 
   async getStats(now = new Date()) {
@@ -55,24 +57,28 @@ export class DashboardService {
 
     const monthlyActivity = this.buildMonthlyActivity(assignments, now);
     const topTasks = this.buildTopTasks(assignments);
-    const workload = this.buildWorkload(unfinished);
-    const upcomingDeadlines = [...unfinished]
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, LIST_LIMIT)
-      .map((assignment) => ({
-        id: assignment.id,
-        taskId: assignment.taskId,
-        taskName: assignment.task?.name ?? '',
-        assignees: (assignment.assignees ?? []).map((assignee) => ({
-          id: assignee.user.id,
-          firstName: assignee.user.firstName,
-          lastName: assignee.user.lastName,
-          avatar: assignee.user.avatarUrl ?? undefined,
+    const workload = await this.buildWorkload(unfinished);
+    const upcomingDeadlines = await Promise.all(
+      [...unfinished]
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+        .slice(0, LIST_LIMIT)
+        .map(async (assignment) => ({
+          id: assignment.id,
+          taskId: assignment.taskId,
+          taskName: assignment.task?.name ?? '',
+          assignees: await Promise.all(
+            (assignment.assignees ?? []).map(async (assignee) => ({
+              id: assignee.user.id,
+              firstName: assignee.user.firstName,
+              lastName: assignee.user.lastName,
+              avatar: await this.storageService.resolveDownloadUrl(assignee.user.avatarUrl),
+            })),
+          ),
+          dueDate: assignment.dueDate,
+          progress: Number(assignment.progress),
+          status: deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate, now),
         })),
-        dueDate: assignment.dueDate,
-        progress: Number(assignment.progress),
-        status: deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate, now),
-      }));
+    );
 
     const usersWithActiveWork = new Set(
       unfinished.flatMap((assignment) => assignment.assignees.map((assignee) => assignee.userId)),
@@ -153,10 +159,10 @@ export class DashboardService {
     return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
   }
 
-  private buildWorkload(assignments: Assignment[]) {
+  private async buildWorkload(assignments: Assignment[]) {
     const counts = new Map<
       string,
-      { userId: string; name: string; avatar?: string; count: number }
+      { userId: string; name: string; avatarKey?: string; count: number }
     >();
 
     for (const assignment of assignments) {
@@ -164,7 +170,7 @@ export class DashboardService {
         const existing = counts.get(assignee.userId) ?? {
           userId: assignee.userId,
           name: `${assignee.user.firstName} ${assignee.user.lastName}`,
-          avatar: assignee.user.avatarUrl ?? undefined,
+          avatarKey: assignee.user.avatarUrl ?? undefined,
           count: 0,
         };
         existing.count += 1;
@@ -172,6 +178,13 @@ export class DashboardService {
       }
     }
 
-    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, LIST_LIMIT);
+    const top = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, LIST_LIMIT);
+
+    return Promise.all(
+      top.map(async ({ avatarKey, ...item }) => ({
+        ...item,
+        avatar: await this.storageService.resolveDownloadUrl(avatarKey),
+      })),
+    );
   }
 }

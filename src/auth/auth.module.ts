@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { MailModule } from '../mail/mail.module.js';
 import { Organization } from '../organizations/entities/organization.entity.js';
+import { StorageModule } from '../storage/storage.module.js';
 import { User } from '../users/entities/user.entity.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
@@ -41,6 +42,7 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
       OAuthExchangeCode,
     ]),
     MailModule,
+    StorageModule,
   ],
   controllers: [AuthController],
   providers: [

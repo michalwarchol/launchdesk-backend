@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { StorageModule } from '../storage/storage.module.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { AssignmentsController } from './assignments.controller.js';
@@ -11,6 +12,7 @@ import { Assignment } from './entities/assignment.entity.js';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Assignment, AssignmentAssignee, Task, User]),
+    StorageModule,
   ],
   controllers: [AssignmentsController],
   providers: [AssignmentsService],

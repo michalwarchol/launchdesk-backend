@@ -51,7 +51,7 @@ export class UsersService {
     const [users, total] = await qb.getManyAndCount();
 
     return {
-      data: users.map((user) => this.toResponse(user)),
+      data: await Promise.all(users.map((user) => this.toResponse(user))),
       meta: buildPaginationMeta(query.page, query.pageSize, total),
     };
   }
@@ -179,14 +179,14 @@ export class UsersService {
     await this.usersRepository.save(user);
   }
 
-  toResponse(user: User): UserResponseDto {
+  async toResponse(user: User): Promise<UserResponseDto> {
     return {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      avatar: user.avatarUrl ?? '',
+      avatar: (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
     };
