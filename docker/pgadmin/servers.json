@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Launchdesk",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "launchdesk",
+      "Username": "launchdesk",
+      "SSLMode": "prefer",
+      "PassFile": "/var/lib/pgadmin/pgpass"
+    }
+  }
+}

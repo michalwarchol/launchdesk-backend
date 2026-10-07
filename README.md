@@ -36,6 +36,7 @@ npm run start:dev
 API: `http://localhost:4000/api`  
 Swagger: `http://localhost:4000/api/docs`  
 Mailpit UI: `http://localhost:8025`
+pgAdmin: `http://localhost:5050/browser/`
 
 ## Seeded credentials
 
@@ -87,7 +88,4 @@ OAuth (`GOOGLE_*`, `GITHUB_*`) is optional — leave blank to disable provider r
 
 ## Useful commands
 
-- Enter postgres container
-```
-docker exec -it launchdesk-backend-postgres-1 bash
-```
+- Enter postgres container: `docker exec -it launchdesk-backend-postgres-1 bash`
