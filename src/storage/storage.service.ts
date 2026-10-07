@@ -63,4 +63,11 @@ export class StorageService {
 
     return getSignedUrl(this.client, command, { expiresIn: 300 });
   }
+
+  /** Returns a presigned URL for a stored key, or `undefined` when there is no key. */
+  async resolveDownloadUrl(key: string | null | undefined): Promise<string | undefined> {
+    if (!key) return undefined;
+
+    return this.getPresignedDownloadUrl(key);
+  }
 }

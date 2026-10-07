@@ -9,6 +9,7 @@ import { AppException } from '../common/exceptions/app.exception.js';
 import { generateToken, hashToken } from '../common/utils/crypto.js';
 import { MailService } from '../mail/mail.service.js';
 import { Organization } from '../organizations/entities/organization.entity.js';
+import { StorageService } from '../storage/storage.service.js';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity.js';
 import { AcceptInviteDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/auth.dto.js';
 import { AuthTokensDto, AuthUserDto, InviteLookupDto } from './dto/auth-response.dto.js';
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly mailService: MailService,
+    private readonly storageService: StorageService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokensDto> {
@@ -254,14 +256,14 @@ export class AuthService {
     return this.issueTokens(stored.user);
   }
 
-  toAuthUser(user: User): AuthUserDto {
+  async toAuthUser(user: User): Promise<AuthUserDto> {
     return {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      avatar: user.avatarUrl ?? '',
+      avatar: (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
       hasPassword: user.passwordHash !== null,
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
@@ -291,7 +293,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: this.toAuthUser(user),
+      user: await this.toAuthUser(user),
     };
   }
 }

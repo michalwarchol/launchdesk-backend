@@ -9,6 +9,7 @@ import {
   parseSort,
   PaginationQueryDto,
 } from '../common/dto/pagination.dto.js';
+import { StorageService } from '../storage/storage.service.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
 import { CreateAssignmentDto, UpdateAssignmentDto } from './dto/assignment.dto.js';
@@ -39,6 +40,7 @@ export class AssignmentsService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly storageService: StorageService,
   ) {}
 
   async findAll(query: AssignmentQuery): Promise<PaginatedResponse<AssignmentResponseDto>> {
@@ -79,7 +81,7 @@ export class AssignmentsService {
     const data = filtered.slice(start, start + pageSize);
 
     return {
-      data: data.map((assignment) => this.toResponse(assignment)),
+      data: await Promise.all(data.map((assignment) => this.toResponse(assignment))),
       meta: buildPaginationMeta(page, pageSize, filtered.length),
     };
   }
@@ -209,17 +211,19 @@ export class AssignmentsService {
     await this.assignmentsRepository.remove(assignment);
   }
 
-  toResponse(assignment: Assignment): AssignmentResponseDto {
+  async toResponse(assignment: Assignment): Promise<AssignmentResponseDto> {
     return {
       id: assignment.id,
       taskId: assignment.taskId,
       taskName: assignment.task?.name ?? '',
-      assignees: (assignment.assignees ?? []).map((assignee) => ({
-        id: assignee.user.id,
-        firstName: assignee.user.firstName,
-        lastName: assignee.user.lastName,
-        avatar: assignee.user.avatarUrl ?? undefined,
-      })),
+      assignees: await Promise.all(
+        (assignment.assignees ?? []).map(async (assignee) => ({
+          id: assignee.user.id,
+          firstName: assignee.user.firstName,
+          lastName: assignee.user.lastName,
+          avatar: await this.storageService.resolveDownloadUrl(assignee.user.avatarUrl),
+        })),
+      ),
       progress: Number(assignment.progress),
       dueDate: assignment.dueDate,
       createdAt: assignment.createdAt.toISOString().slice(0, 10),
