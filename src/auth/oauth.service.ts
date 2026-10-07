@@ -17,7 +17,31 @@ export class OAuthService {
     private readonly authService: AuthService,
   ) {}
 
+  /**
+   * A stored provider link decides who signs in. The provider email is only used the first time a
+   * provider account is seen, to attach it to the member with that address.
+   */
   async handleCallback(profile: OAuthProfile): Promise<string> {
+    const provider = profile.provider === 'google' ? OAuthProvider.Google : OAuthProvider.Github;
+
+    const link = await this.oauthAccountsRepository.findOne({
+      where: { provider, providerAccountId: profile.providerAccountId },
+    });
+
+    if (link) {
+      // Looked up by id so that a soft-deleted member stays out. The link is never moved to
+      // whoever holds that email now.
+      const linkedUser = await this.usersRepository.findOne({ where: { id: link.userId } });
+
+      if (!linkedUser) {
+        throw new Error('noAccount');
+      }
+
+      await this.activateIfInvited(linkedUser);
+
+      return this.authService.createOAuthExchangeCode(linkedUser.id);
+    }
+
     const user = await this.usersRepository.findOne({
       where: { email: profile.email.toLowerCase() },
     });
@@ -26,30 +50,23 @@ export class OAuthService {
       throw new Error('noAccount');
     }
 
+    await this.activateIfInvited(user);
+
+    await this.oauthAccountsRepository.save(
+      this.oauthAccountsRepository.create({
+        userId: user.id,
+        provider,
+        providerAccountId: profile.providerAccountId,
+      }),
+    );
+
+    return this.authService.createOAuthExchangeCode(user.id);
+  }
+
+  private async activateIfInvited(user: User): Promise<void> {
     if (user.status === UserStatus.Invited) {
       user.status = UserStatus.Active;
       await this.usersRepository.save(user);
     }
-
-    const provider = profile.provider === 'google' ? OAuthProvider.Google : OAuthProvider.Github;
-
-    const existing = await this.oauthAccountsRepository.findOne({
-      where: {
-        provider,
-        providerAccountId: profile.providerAccountId,
-      },
-    });
-
-    if (!existing) {
-      await this.oauthAccountsRepository.save(
-        this.oauthAccountsRepository.create({
-          userId: user.id,
-          provider,
-          providerAccountId: profile.providerAccountId,
-        }),
-      );
-    }
-
-    return this.authService.createOAuthExchangeCode(user.id);
   }
 }

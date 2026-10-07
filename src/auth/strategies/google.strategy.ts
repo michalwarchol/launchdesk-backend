@@ -9,6 +9,18 @@ export interface OAuthProfile {
   email: string;
 }
 
+/**
+ * Returns the profile email only when Google marks it verified (`email_verified`). A missing flag
+ * counts as unverified.
+ */
+export function pickVerifiedGoogleEmail(
+  emails: { value: string; verified?: boolean }[] | undefined,
+): string | undefined {
+  const first = emails?.[0];
+
+  return first?.verified === true && first.value ? first.value : undefined;
+}
+
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(config: ConfigService) {
@@ -23,10 +35,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   validate(
     _accessToken: string,
     _refreshToken: string,
-    profile: { id: string; emails?: { value: string }[] },
+    profile: { id: string; emails?: { value: string; verified?: boolean }[] },
     done: VerifyCallback,
   ): void {
-    const email = profile.emails?.[0]?.value;
+    const email = pickVerifiedGoogleEmail(profile.emails);
 
     if (!email) {
       done(new Error('providerFailed'), false);

@@ -7,6 +7,7 @@ import {
   Query,
   Req,
   Res,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -27,6 +28,8 @@ import {
   RegisterDto,
   ResetPasswordDto,
 } from './dto/auth.dto.js';
+import { OAuthCallbackExceptionFilter } from './filters/oauth-callback-exception.filter.js';
+import { OAuthStartGuard, sanitizeNext } from './guards/oauth-start.guard.js';
 import { OAuthService } from './oauth.service.js';
 import { OAuthProfile } from './strategies/google.strategy.js';
 
@@ -103,46 +106,49 @@ export class AuthController {
 
   @Public()
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(OAuthStartGuard('google'))
   googleAuth() {
     return;
   }
 
   @Public()
   @Get('google/callback')
+  @UseFilters(OAuthCallbackExceptionFilter)
   @UseGuards(AuthGuard('google'))
   async googleCallback(
     @Req() req: Request & { user: OAuthProfile },
     @Res() res: Response,
-    @Query('next') next?: string,
+    @Query('state') state?: string,
   ) {
-    return this.handleOAuthCallback(req.user, res, next);
+    return this.handleOAuthCallback(req.user, res, state);
   }
 
   @Public()
   @Get('github')
-  @UseGuards(AuthGuard('github'))
+  @UseGuards(OAuthStartGuard('github'))
   githubAuth() {
     return;
   }
 
   @Public()
   @Get('github/callback')
+  @UseFilters(OAuthCallbackExceptionFilter)
   @UseGuards(AuthGuard('github'))
   async githubCallback(
     @Req() req: Request & { user: OAuthProfile },
     @Res() res: Response,
-    @Query('next') next?: string,
+    @Query('state') state?: string,
   ) {
-    return this.handleOAuthCallback(req.user, res, next);
+    return this.handleOAuthCallback(req.user, res, state);
   }
 
   private async handleOAuthCallback(
     profile: OAuthProfile,
     res: Response,
-    next?: string,
+    state?: string,
   ): Promise<void> {
     const frontendUrl = this.config.get<string>('FRONTEND_URL');
+    const next = sanitizeNext(state);
 
     try {
       const code = await this.oauthService.handleCallback(profile);
@@ -160,6 +166,11 @@ export class AuthController {
         ? 'noAccount'
         : 'providerFailed';
       redirectUrl.searchParams.set('error', code);
+
+      if (next) {
+        redirectUrl.searchParams.set('next', next);
+      }
+
       res.redirect(redirectUrl.toString());
     }
   }
