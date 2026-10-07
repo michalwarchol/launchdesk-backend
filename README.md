@@ -84,3 +84,10 @@ See [`.env.example`](.env.example) for the full list. Required in all environmen
 - `AWS_REGION` / `AWS_S3_BUCKET` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
 
 OAuth (`GOOGLE_*`, `GITHUB_*`) is optional — leave blank to disable provider routes.
+
+## Useful commands
+
+- Enter postgres container
+```
+docker exec -it launchdesk-backend-postgres-1 bash
+```
