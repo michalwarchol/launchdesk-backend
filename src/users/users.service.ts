@@ -22,6 +22,7 @@ import {
 } from './dto/user.dto.js';
 import { UserResponseDto } from './dto/user-response.dto.js';
 import { User, UserStatus } from './entities/user.entity.js';
+import { Directories } from '../storage/utils/directories.js';
 
 const USER_SORT_KEYS = ['firstName', 'lastName', 'email', 'role', 'createdAt'] as const;
 
@@ -151,7 +152,7 @@ export class UsersService {
 
       const extension = metadata.split('/')[1] ?? 'png';
       const buffer = Buffer.from(base64, 'base64');
-      const key = await this.storageService.uploadObject(buffer, metadata, extension);
+      const key = await this.storageService.uploadObject(Directories.Avatars, buffer, metadata, extension);
       user.avatarUrl = key;
     }
 

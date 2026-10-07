@@ -8,6 +8,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import { Directories } from './utils/directories.js';
 
 @Injectable()
 export class StorageService {
@@ -26,11 +27,12 @@ export class StorageService {
   }
 
   async uploadObject(
+    dir: Directories,
     buffer: Buffer,
     mimeType: string,
     extension: string,
   ): Promise<string> {
-    const key = `documents/${randomUUID()}.${extension}`;
+    const key = `${dir}/${randomUUID()}.${extension}`;
 
     await this.client.send(
       new PutObjectCommand({
