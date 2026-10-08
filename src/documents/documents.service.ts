@@ -126,7 +126,11 @@ export class DocumentsService {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
 
-    return this.storageService.getPresignedDownloadUrl(document.s3Key);
+    if (!(await this.storageService.objectExists(document.s3Key))) {
+      throw new AppException('fileMissing', HttpStatus.NOT_FOUND);
+    }
+
+    return this.storageService.getPresignedDownloadUrl(document.s3Key, document.name);
   }
 
   toResponse(document: Document): DocumentResponseDto {

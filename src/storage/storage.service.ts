@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -9,6 +10,13 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { Directories } from './utils/directories.js';
+
+function buildAttachmentDisposition(filename: string): string {
+  const clean = filename.replace(/[\r\n]/g, ' ').trim();
+  const asciiFallback = clean.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(clean).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
+}
 
 @Injectable()
 export class StorageService {
@@ -55,10 +63,33 @@ export class StorageService {
     );
   }
 
-  async getPresignedDownloadUrl(key: string): Promise<string> {
+  /** Returns `false` when the object is absent from the bucket; other S3 failures are rethrown. */
+  async objectExists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return true;
+    } catch (error) {
+      const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+
+      if (
+        err.name === 'NotFound' ||
+        err.name === 'NoSuchKey' ||
+        err.$metadata?.httpStatusCode === 404
+      ) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  async getPresignedDownloadUrl(key: string, filename?: string): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
+      ...(filename
+        ? { ResponseContentDisposition: buildAttachmentDisposition(filename) }
+        : {}),
     });
 
     return getSignedUrl(this.client, command, { expiresIn: 300 });
