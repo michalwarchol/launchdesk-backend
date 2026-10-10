@@ -75,4 +75,11 @@ export class AssignmentsController {
   async remove(@Param('id') id: string) {
     await this.assignmentsService.remove(id);
   }
+
+  @Delete(':id/assignees/:userId')
+  @Roles(UserRole.Admin)
+  @HttpCode(204)
+  async removeAssignee(@Param('id') id: string, @Param('userId') userId: string) {
+    await this.assignmentsService.removeAssignee(id, userId);
+  }
 }
