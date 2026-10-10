@@ -16,7 +16,6 @@ import {
   CreateTaskDto,
   CreateTaskStepDto,
   ReorderStepsDto,
-  UpdateTaskDto,
   UpdateTaskStepDto,
 } from './dto/task.dto.js';
 import { TaskDetailDto, TaskListItemDto, TaskStepResponseDto } from './dto/task-response.dto.js';
@@ -122,18 +121,42 @@ export class TasksService {
     });
   }
 
-  async update(id: string, dto: UpdateTaskDto): Promise<TaskDetailDto> {
+  async update(id: string, dto: CreateTaskDto): Promise<TaskDetailDto> {
     const task = await this.tasksRepository.findOne({ where: { id } });
 
     if (!task) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
 
-    if (dto.name !== undefined) task.name = dto.name.trim();
-    if (dto.description !== undefined) task.description = dto.description.trim();
+    return this.dataSource.transaction(async (manager) => {
+      task.name = dto.name.trim();
+      task.description = dto.description.trim();
+      await manager.save(task);
 
-    await this.tasksRepository.save(task);
-    return this.findOne(id);
+      await manager.delete(TaskStep, { taskId: id });
+      await this.saveSteps(manager, id, dto.steps);
+
+      const updated = await manager.findOne(Task, {
+        where: { id },
+        relations: {
+          steps: {
+            attachments: {
+              document: true,
+            },
+          },
+        },
+        order: {
+          steps: {
+            position: 'ASC',
+            attachments: {
+              position: 'ASC',
+            },
+          },
+        },
+      });
+
+      return this.toDetail(updated!);
+    });
   }
 
   async remove(id: string): Promise<void> {
