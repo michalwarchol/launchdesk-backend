@@ -211,6 +211,25 @@ export class AssignmentsService {
     await this.assignmentsRepository.remove(assignment);
   }
 
+  async removeAssignee(assignmentId: string, userId: string): Promise<void> {
+    const assignment = await this.assignmentsRepository.findOne({
+      where: { id: assignmentId },
+    });
+
+    if (!assignment) {
+      throw new AppException('notFound', HttpStatus.NOT_FOUND);
+    }
+
+    const result = await this.assignmentAssigneesRepository.delete({
+      assignmentId,
+      userId,
+    });
+
+    if (!result.affected) {
+      throw new AppException('notFound', HttpStatus.NOT_FOUND);
+    }
+  }
+
   async toResponse(assignment: Assignment): Promise<AssignmentResponseDto> {
     return {
       id: assignment.id,

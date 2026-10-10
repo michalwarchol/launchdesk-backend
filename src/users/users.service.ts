@@ -21,6 +21,7 @@ import {
   UpdateUserDto,
 } from './dto/user.dto.js';
 import { UserResponseDto } from './dto/user-response.dto.js';
+import { AssignmentAssignee } from '../assignments/entities/assignment-assignee.entity.js';
 import { User, UserStatus } from './entities/user.entity.js';
 import { Directories } from '../storage/utils/directories.js';
 
@@ -33,6 +34,8 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(InviteToken)
     private readonly inviteTokensRepository: Repository<InviteToken>,
+    @InjectRepository(AssignmentAssignee)
+    private readonly assignmentAssigneesRepository: Repository<AssignmentAssignee>,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
   ) {}
@@ -118,6 +121,7 @@ export class UsersService {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
 
+    await this.assignmentAssigneesRepository.delete({ userId: id });
     await this.usersRepository.softRemove(user);
   }
 
