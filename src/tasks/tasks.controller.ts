@@ -19,7 +19,6 @@ import {
   CreateTaskDto,
   CreateTaskStepDto,
   ReorderStepsDto,
-  UpdateTaskDto,
   UpdateTaskStepDto,
 } from './dto/task.dto.js';
 import { TasksService } from './tasks.service.js';
@@ -48,7 +47,7 @@ export class TasksController {
 
   @Patch(':id')
   @Roles(UserRole.Admin)
-  update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
+  update(@Param('id') id: string, @Body() dto: CreateTaskDto) {
     return this.tasksService.update(id, dto);
   }
 
