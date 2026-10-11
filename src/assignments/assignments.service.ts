@@ -170,18 +170,20 @@ export class AssignmentsService {
       throw new AppException('forbidden', HttpStatus.FORBIDDEN);
     }
 
+    const columns: { progress?: string; completedAt?: string | null; dueDate?: string } = {};
+
     if (dto.progress !== undefined) {
       if (!isAssignee && !isAdmin) {
         throw new AppException('forbidden', HttpStatus.FORBIDDEN);
       }
 
-      assignment.progress = dto.progress.toFixed(2);
-      assignment.completedAt = dto.progress >= 1 ? new Date().toISOString().slice(0, 10) : null;
+      columns.progress = dto.progress.toFixed(2);
+      columns.completedAt = dto.progress >= 1 ? new Date().toISOString().slice(0, 10) : null;
     }
 
     if (isAdmin) {
       if (dto.dueDate !== undefined) {
-        assignment.dueDate = dto.dueDate;
+        columns.dueDate = dto.dueDate;
       }
 
       if (dto.assigneeIds !== undefined) {
@@ -197,7 +199,12 @@ export class AssignmentsService {
       }
     }
 
-    await this.assignmentsRepository.save(assignment);
+    // Update columns directly. Saving the loaded assignment would persist its
+    // stale assignees relation and delete the rows just inserted above.
+    if (Object.keys(columns).length > 0) {
+      await this.assignmentsRepository.update(id, columns);
+    }
+
     return this.findOne(id);
   }
 
