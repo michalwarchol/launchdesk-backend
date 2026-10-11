@@ -21,7 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
 import { DocumentsService } from './documents.service.js';
-import { UpdateDocumentDto } from './dto/document.dto.js';
+import { DeleteManyDocumentsDto, UpdateDocumentDto } from './dto/document.dto.js';
 
 @ApiTags('documents')
 @ApiBearerAuth()
@@ -54,6 +54,13 @@ export class DocumentsController {
   @Roles(UserRole.Admin)
   update(@Param('id') id: string, @Body() dto: UpdateDocumentDto) {
     return this.documentsService.update(id, dto);
+  }
+
+  @Delete()
+  @Roles(UserRole.Admin)
+  @HttpCode(204)
+  async removeMany(@Body() dto: DeleteManyDocumentsDto) {
+    await this.documentsService.removeMany(dto.ids);
   }
 
   @Delete(':id')
