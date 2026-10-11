@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { AppException } from '../common/exceptions/app.exception.js';
 import {
@@ -109,14 +109,24 @@ export class DocumentsService {
   }
 
   async remove(id: string): Promise<void> {
-    const document = await this.documentsRepository.findOne({ where: { id } });
+    await this.removeMany([id]);
+  }
 
-    if (!document) {
+  async removeMany(ids: string[]): Promise<void> {
+    const uniqueIds = [...new Set(ids)];
+    const documents = await this.documentsRepository.find({
+      where: { id: In(uniqueIds) },
+    });
+
+    if (documents.length !== uniqueIds.length) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
 
-    await this.storageService.deleteObject(document.s3Key);
-    await this.documentsRepository.remove(document);
+    for (const document of documents) {
+      await this.storageService.deleteObject(document.s3Key);
+    }
+
+    await this.documentsRepository.delete(uniqueIds);
   }
 
   async getDownloadUrl(id: string): Promise<string> {
