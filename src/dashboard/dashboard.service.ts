@@ -26,9 +26,10 @@ export class DashboardService {
     private readonly storageService: StorageService,
   ) {}
 
-  async getStats(now = new Date()) {
+  async getStats(organizationId: string, now = new Date()) {
     const [assignments, tasks, users, stepCount] = await Promise.all([
       this.assignmentsRepository.find({
+        where: { organizationId },
         relations: {
           task: true,
           assignees: {
@@ -36,19 +37,33 @@ export class DashboardService {
           },
         },
       }),
-      this.tasksRepository.find(),
-      this.usersRepository.find(),
-      this.taskStepsRepository.count(),
+      this.tasksRepository.find({ where: { organizationId } }),
+      this.usersRepository.find({ where: { organizationId } }),
+      this.taskStepsRepository
+        .createQueryBuilder('step')
+        .innerJoin('step.task', 'task')
+        .where('task.organizationId = :organizationId', { organizationId })
+        .getCount(),
     ]);
 
     const statuses = assignments.map((assignment) =>
-      deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate, now),
+      deriveAssignmentStatus(
+        Number(assignment.progress),
+        assignment.dueDate,
+        now,
+      ),
     );
 
-    const completed = statuses.filter((status) => status === 'completed').length;
+    const completed = statuses.filter(
+      (status) => status === 'completed',
+    ).length;
     const overdue = statuses.filter((status) => status === 'overdue').length;
-    const inProgress = statuses.filter((status) => status === 'inProgress').length;
-    const notStarted = statuses.filter((status) => status === 'notStarted').length;
+    const inProgress = statuses.filter(
+      (status) => status === 'inProgress',
+    ).length;
+    const notStarted = statuses.filter(
+      (status) => status === 'notStarted',
+    ).length;
     const active = inProgress + overdue + notStarted;
 
     const unfinished = assignments.filter(
@@ -71,17 +86,25 @@ export class DashboardService {
               id: assignee.user.id,
               firstName: assignee.user.firstName,
               lastName: assignee.user.lastName,
-              avatar: await this.storageService.resolveDownloadUrl(assignee.user.avatarUrl),
+              avatar: await this.storageService.resolveDownloadUrl(
+                assignee.user.avatarUrl,
+              ),
             })),
           ),
           dueDate: assignment.dueDate,
           progress: Number(assignment.progress),
-          status: deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate, now),
+          status: deriveAssignmentStatus(
+            Number(assignment.progress),
+            assignment.dueDate,
+            now,
+          ),
         })),
     );
 
     const usersWithActiveWork = new Set(
-      unfinished.flatMap((assignment) => assignment.assignees.map((assignee) => assignee.userId)),
+      unfinished.flatMap((assignment) =>
+        assignment.assignees.map((assignee) => assignee.userId),
+      ),
     ).size;
 
     return {
@@ -119,12 +142,19 @@ export class DashboardService {
     const buckets = new Map<string, { created: number; completed: number }>();
 
     for (let offset = MONTHS_IN_ACTIVITY - 1; offset >= 0; offset -= 1) {
-      const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
-      buckets.set(month.toISOString().slice(0, 7), { created: 0, completed: 0 });
+      const month = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1),
+      );
+      buckets.set(month.toISOString().slice(0, 7), {
+        created: 0,
+        completed: 0,
+      });
     }
 
     for (const assignment of assignments) {
-      const createdBucket = buckets.get(assignment.createdAt.toISOString().slice(0, 7));
+      const createdBucket = buckets.get(
+        assignment.createdAt.toISOString().slice(0, 7),
+      );
 
       if (createdBucket) createdBucket.created += 1;
 
@@ -144,7 +174,10 @@ export class DashboardService {
   }
 
   private buildTopTasks(assignments: Assignment[]) {
-    const counts = new Map<string, { taskId: string; taskName: string; count: number }>();
+    const counts = new Map<
+      string,
+      { taskId: string; taskName: string; count: number }
+    >();
 
     for (const assignment of assignments) {
       const existing = counts.get(assignment.taskId) ?? {
@@ -178,7 +211,9 @@ export class DashboardService {
       }
     }
 
-    const top = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, LIST_LIMIT);
+    const top = [...counts.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, LIST_LIMIT);
 
     return Promise.all(
       top.map(async ({ avatarKey, ...item }) => ({

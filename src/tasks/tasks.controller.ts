@@ -25,18 +25,19 @@ import { TasksService } from './tasks.service.js';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
+@Roles(UserRole.Admin)
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.tasksService.findAll(query);
+  findAll(@CurrentUser() user: User, @Query() query: PaginationQueryDto) {
+    return this.tasksService.findAll(query, user.organizationId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.tasksService.findOne(id);
+  findOne(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.tasksService.findOne(id, user.organizationId);
   }
 
   @Post()
@@ -47,43 +48,60 @@ export class TasksController {
 
   @Patch(':id')
   @Roles(UserRole.Admin)
-  update(@Param('id') id: string, @Body() dto: CreateTaskDto) {
-    return this.tasksService.update(id, dto);
+  update(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: CreateTaskDto,
+  ) {
+    return this.tasksService.update(id, dto, user.organizationId);
   }
 
   @Delete(':id')
   @Roles(UserRole.Admin)
   @HttpCode(204)
-  async remove(@Param('id') id: string) {
-    await this.tasksService.remove(id);
+  async remove(@CurrentUser() user: User, @Param('id') id: string) {
+    await this.tasksService.remove(id, user.organizationId);
   }
 
   @Post(':id/steps')
   @Roles(UserRole.Admin)
-  addStep(@Param('id') id: string, @Body() dto: CreateTaskStepDto) {
-    return this.tasksService.addStep(id, dto);
+  addStep(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: CreateTaskStepDto,
+  ) {
+    return this.tasksService.addStep(id, dto, user.organizationId);
   }
 
   @Patch(':id/steps/reorder')
   @Roles(UserRole.Admin)
-  reorderSteps(@Param('id') id: string, @Body() dto: ReorderStepsDto) {
-    return this.tasksService.reorderSteps(id, dto);
+  reorderSteps(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: ReorderStepsDto,
+  ) {
+    return this.tasksService.reorderSteps(id, dto, user.organizationId);
   }
 
   @Patch(':id/steps/:stepId')
   @Roles(UserRole.Admin)
   updateStep(
+    @CurrentUser() user: User,
     @Param('id') id: string,
     @Param('stepId') stepId: string,
     @Body() dto: UpdateTaskStepDto,
   ) {
-    return this.tasksService.updateStep(id, stepId, dto);
+    return this.tasksService.updateStep(id, stepId, dto, user.organizationId);
   }
 
   @Delete(':id/steps/:stepId')
   @Roles(UserRole.Admin)
   @HttpCode(204)
-  async removeStep(@Param('id') id: string, @Param('stepId') stepId: string) {
-    await this.tasksService.removeStep(id, stepId);
+  async removeStep(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('stepId') stepId: string,
+  ) {
+    await this.tasksService.removeStep(id, stepId, user.organizationId);
   }
 }

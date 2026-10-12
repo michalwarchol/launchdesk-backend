@@ -18,7 +18,11 @@ import {
   ReorderStepsDto,
   UpdateTaskStepDto,
 } from './dto/task.dto.js';
-import { TaskDetailDto, TaskListItemDto, TaskStepResponseDto } from './dto/task-response.dto.js';
+import {
+  TaskDetailDto,
+  TaskListItemDto,
+  TaskStepResponseDto,
+} from './dto/task-response.dto.js';
 import { TaskStepAttachment } from './entities/task-step-attachment.entity.js';
 import { TaskStep } from './entities/task-step.entity.js';
 import { Task } from './entities/task.entity.js';
@@ -40,9 +44,13 @@ export class TasksService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<TaskListItemDto>> {
+  async findAll(
+    query: PaginationQueryDto,
+    organizationId: string,
+  ): Promise<PaginatedResponse<TaskListItemDto>> {
     const sort = parseSort(query.sort, TASK_SORT_KEYS);
     const [tasks, total] = await this.tasksRepository.findAndCount({
+      where: { organizationId },
       relations: { steps: true },
       order: {
         [sort?.key ?? 'createdAt']: sort?.direction ?? 'DESC',
@@ -59,9 +67,9 @@ export class TasksService {
     };
   }
 
-  async findOne(id: string): Promise<TaskDetailDto> {
+  async findOne(id: string, organizationId: string): Promise<TaskDetailDto> {
     const task = await this.tasksRepository.findOne({
-      where: { id },
+      where: { id, organizationId },
       relations: {
         steps: {
           attachments: {
@@ -93,10 +101,11 @@ export class TasksService {
           name: dto.name.trim(),
           description: dto.description.trim(),
           createdById: user.id,
+          organizationId: user.organizationId,
         }),
       );
 
-      await this.saveSteps(manager, task.id, dto.steps);
+      await this.saveSteps(manager, task.id, dto.steps, user.organizationId);
 
       const created = await manager.findOne(Task, {
         where: { id: task.id },
@@ -121,8 +130,12 @@ export class TasksService {
     });
   }
 
-  async update(id: string, dto: CreateTaskDto): Promise<TaskDetailDto> {
-    const task = await this.tasksRepository.findOne({ where: { id } });
+  async update(
+    id: string,
+    dto: CreateTaskDto,
+    organizationId: string,
+  ): Promise<TaskDetailDto> {
+    const task = await this.requireTask(id, organizationId);
 
     if (!task) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -134,7 +147,7 @@ export class TasksService {
       await manager.save(task);
 
       await manager.delete(TaskStep, { taskId: id });
-      await this.saveSteps(manager, id, dto.steps);
+      await this.saveSteps(manager, id, dto.steps, organizationId);
 
       const updated = await manager.findOne(Task, {
         where: { id },
@@ -159,8 +172,8 @@ export class TasksService {
     });
   }
 
-  async remove(id: string): Promise<void> {
-    const task = await this.tasksRepository.findOne({ where: { id } });
+  async remove(id: string, organizationId: string): Promise<void> {
+    const task = await this.requireTask(id, organizationId);
 
     if (!task) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -169,14 +182,16 @@ export class TasksService {
     await this.tasksRepository.remove(task);
   }
 
-  async addStep(taskId: string, dto: CreateTaskStepDto): Promise<TaskStepResponseDto> {
-    const task = await this.tasksRepository.findOne({ where: { id: taskId } });
+  async addStep(
+    taskId: string,
+    dto: CreateTaskStepDto,
+    organizationId: string,
+  ): Promise<TaskStepResponseDto> {
+    const task = await this.requireTask(taskId, organizationId);
 
-    if (!task) {
-      throw new AppException('notFound', HttpStatus.NOT_FOUND);
-    }
-
-    const position = await this.taskStepsRepository.count({ where: { taskId } });
+    const position = await this.taskStepsRepository.count({
+      where: { taskId },
+    });
     const step = await this.taskStepsRepository.save(
       this.taskStepsRepository.create({
         taskId,
@@ -186,7 +201,11 @@ export class TasksService {
       }),
     );
 
-    await this.replaceAttachments(step.id, dto.attachmentIds);
+    await this.replaceAttachments(
+      step.id,
+      dto.attachmentIds,
+      task.organizationId,
+    );
 
     const saved = await this.taskStepsRepository.findOne({
       where: { id: step.id },
@@ -201,7 +220,9 @@ export class TasksService {
     taskId: string,
     stepId: string,
     dto: UpdateTaskStepDto,
+    organizationId: string,
   ): Promise<TaskStepResponseDto> {
+    const task = await this.requireTask(taskId, organizationId);
     const step = await this.taskStepsRepository.findOne({
       where: { id: stepId, taskId },
     });
@@ -216,7 +237,11 @@ export class TasksService {
     await this.taskStepsRepository.save(step);
 
     if (dto.attachmentIds !== undefined) {
-      await this.replaceAttachments(step.id, dto.attachmentIds);
+      await this.replaceAttachments(
+        step.id,
+        dto.attachmentIds,
+        task.organizationId,
+      );
     }
 
     const saved = await this.taskStepsRepository.findOne({
@@ -228,7 +253,12 @@ export class TasksService {
     return this.toStepResponse(saved!);
   }
 
-  async removeStep(taskId: string, stepId: string): Promise<void> {
+  async removeStep(
+    taskId: string,
+    stepId: string,
+    organizationId: string,
+  ): Promise<void> {
+    await this.requireTask(taskId, organizationId);
     const step = await this.taskStepsRepository.findOne({
       where: { id: stepId, taskId },
     });
@@ -240,7 +270,12 @@ export class TasksService {
     await this.taskStepsRepository.remove(step);
   }
 
-  async reorderSteps(taskId: string, dto: ReorderStepsDto): Promise<TaskDetailDto> {
+  async reorderSteps(
+    taskId: string,
+    dto: ReorderStepsDto,
+    organizationId: string,
+  ): Promise<TaskDetailDto> {
+    await this.requireTask(taskId, organizationId);
     const steps = await this.taskStepsRepository.find({ where: { taskId } });
 
     if (steps.length !== dto.stepIds.length) {
@@ -260,13 +295,26 @@ export class TasksService {
     }
 
     await this.taskStepsRepository.save(steps);
-    return this.findOne(taskId);
+    return this.findOne(taskId, organizationId);
+  }
+
+  private async requireTask(id: string, organizationId: string): Promise<Task> {
+    const task = await this.tasksRepository.findOne({
+      where: { id, organizationId },
+    });
+
+    if (!task) {
+      throw new AppException('notFound', HttpStatus.NOT_FOUND);
+    }
+
+    return task;
   }
 
   private async saveSteps(
     manager: typeof this.dataSource.manager,
     taskId: string,
     steps: CreateTaskStepDto[],
+    organizationId: string,
   ): Promise<void> {
     for (const [index, stepDto] of steps.entries()) {
       const step = await manager.save(
@@ -283,7 +331,13 @@ export class TasksService {
           where: { id: In(stepDto.attachmentIds) },
         });
 
-        if (documents.length !== stepDto.attachmentIds.length) {
+        if (
+          !this.attachmentsBelongToOrganization(
+            documents,
+            stepDto.attachmentIds,
+            organizationId,
+          )
+        ) {
           throw new AppException('invalidAttachment', HttpStatus.BAD_REQUEST);
         }
 
@@ -300,7 +354,11 @@ export class TasksService {
     }
   }
 
-  private async replaceAttachments(stepId: string, attachmentIds: string[]): Promise<void> {
+  private async replaceAttachments(
+    stepId: string,
+    attachmentIds: string[],
+    organizationId: string,
+  ): Promise<void> {
     await this.taskStepAttachmentsRepository.delete({ taskStepId: stepId });
 
     if (attachmentIds.length === 0) {
@@ -311,7 +369,13 @@ export class TasksService {
       where: { id: In(attachmentIds) },
     });
 
-    if (documents.length !== attachmentIds.length) {
+    if (
+      !this.attachmentsBelongToOrganization(
+        documents,
+        attachmentIds,
+        organizationId,
+      )
+    ) {
       throw new AppException('invalidAttachment', HttpStatus.BAD_REQUEST);
     }
 
@@ -323,6 +387,17 @@ export class TasksService {
           position: index,
         }),
       ),
+    );
+  }
+
+  private attachmentsBelongToOrganization(
+    documents: Document[],
+    attachmentIds: string[],
+    organizationId: string,
+  ): boolean {
+    return (
+      documents.length === attachmentIds.length &&
+      documents.every((document) => document.organizationId === organizationId)
     );
   }
 

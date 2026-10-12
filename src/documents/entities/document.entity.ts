@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
+import { Organization } from '../../organizations/entities/organization.entity.js';
 import { TaskStepAttachment } from '../../tasks/entities/task-step-attachment.entity.js';
 import { User } from '../../users/entities/user.entity.js';
 
@@ -42,10 +43,19 @@ export class Document {
   @Column({ type: 'varchar', length: 500 })
   s3Key!: string;
 
+  @Column({ type: 'uuid' })
+  organizationId!: string;
+
+  @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'organizationId' })
+  organization!: Relation<Organization>;
+
   @Column({ type: 'uuid', nullable: true })
   uploadedById!: string | null;
 
-  @ManyToOne(() => User, (user) => user.uploadedDocuments, { onDelete: 'SET NULL' })
+  @ManyToOne(() => User, (user) => user.uploadedDocuments, {
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'uploadedById' })
   uploadedBy!: Relation<User>;
 

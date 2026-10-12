@@ -21,59 +21,70 @@ import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
 import { DocumentsService } from './documents.service.js';
-import { DeleteManyDocumentsDto, UpdateDocumentDto } from './dto/document.dto.js';
+import {
+  DeleteManyDocumentsDto,
+  UpdateDocumentDto,
+} from './dto/document.dto.js';
 
 @ApiTags('documents')
 @ApiBearerAuth()
+@Roles(UserRole.Admin)
 @Controller('documents')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.documentsService.findAll(query);
+  findAll(@CurrentUser() user: User, @Query() query: PaginationQueryDto) {
+    return this.documentsService.findAll(query, user.organizationId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.documentsService.findOne(id);
+  findOne(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.documentsService.findOne(id, user.organizationId);
   }
 
   @Post()
   @Roles(UserRole.Admin)
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FilesInterceptor('files'))
-  upload(
-    @UploadedFiles() files: UploadedFile[],
-    @CurrentUser() user: User,
-  ) {
+  upload(@UploadedFiles() files: UploadedFile[], @CurrentUser() user: User) {
     return this.documentsService.upload(files ?? [], user);
   }
 
   @Patch(':id')
   @Roles(UserRole.Admin)
-  update(@Param('id') id: string, @Body() dto: UpdateDocumentDto) {
-    return this.documentsService.update(id, dto);
+  update(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: UpdateDocumentDto,
+  ) {
+    return this.documentsService.update(id, dto, user.organizationId);
   }
 
   @Delete()
   @Roles(UserRole.Admin)
   @HttpCode(204)
-  async removeMany(@Body() dto: DeleteManyDocumentsDto) {
-    await this.documentsService.removeMany(dto.ids);
+  async removeMany(
+    @CurrentUser() user: User,
+    @Body() dto: DeleteManyDocumentsDto,
+  ) {
+    await this.documentsService.removeMany(dto.ids, user.organizationId);
   }
 
   @Delete(':id')
   @Roles(UserRole.Admin)
   @HttpCode(204)
-  async remove(@Param('id') id: string) {
-    await this.documentsService.remove(id);
+  async remove(@CurrentUser() user: User, @Param('id') id: string) {
+    await this.documentsService.remove(id, user.organizationId);
   }
 
   @Get(':id/download')
   @Redirect()
-  async download(@Param('id') id: string) {
-    const url = await this.documentsService.getDownloadUrl(id);
+  async download(@CurrentUser() user: User, @Param('id') id: string) {
+    const url = await this.documentsService.getDownloadUrl(
+      id,
+      user.organizationId,
+    );
     return { url, statusCode: 302 };
   }
 }

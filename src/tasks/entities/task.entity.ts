@@ -11,6 +11,7 @@ import {
 import type { Relation } from 'typeorm';
 
 import { Assignment } from '../../assignments/entities/assignment.entity.js';
+import { Organization } from '../../organizations/entities/organization.entity.js';
 import { User } from '../../users/entities/user.entity.js';
 import { TaskStep } from './task-step.entity.js';
 
@@ -24,6 +25,13 @@ export class Task {
 
   @Column({ type: 'text' })
   description!: string;
+
+  @Column({ type: 'uuid' })
+  organizationId!: string;
+
+  @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'organizationId' })
+  organization!: Relation<Organization>;
 
   @Column({ type: 'uuid', nullable: true })
   createdById!: string | null;

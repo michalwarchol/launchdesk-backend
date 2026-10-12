@@ -82,7 +82,7 @@ async function seed(): Promise<void> {
     { name: 'Security awareness', description: 'Security best practices and phishing drills.', createdById: users[10].id },
     { name: 'Benefits enrollment', description: 'Annual benefits selection workflow.', createdById: users[11].id },
     { name: 'Mentorship pairing', description: 'Match mentors with new hires.', createdById: users[10].id },
-  ].map((task) => taskRepo.create(task)));
+  ].map((task) => taskRepo.create({ ...task, organizationId: organization.id })));
 
   await documentRepo.save([
     { name: 'quarterly-report.pdf', type: DocumentType.Text, extension: 'pdf', size: '2400000', mimeType: 'application/pdf', s3Key: 'seed/quarterly-report.pdf', uploadedById: users[0].id },
@@ -90,7 +90,7 @@ async function seed(): Promise<void> {
     { name: 'budget.xlsx', type: DocumentType.Spreadsheet, extension: 'xlsx', size: '92000', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', s3Key: 'seed/budget.xlsx', uploadedById: users[10].id },
     { name: 'team-photo.png', type: DocumentType.Image, extension: 'png', size: '540000', mimeType: 'image/png', s3Key: 'seed/team-photo.png', uploadedById: users[7].id },
     { name: 'policy.txt', type: DocumentType.Text, extension: 'txt', size: '12000', mimeType: 'text/plain', s3Key: 'seed/policy.txt', uploadedById: users[11].id },
-  ].map((document) => documentRepo.create(document)));
+  ].map((document) => documentRepo.create({ ...document, organizationId: organization.id })));
 
   const rows = [
     { taskIndex: 1, assigneeIndexes: [1, 7, 8], progress: '1.00', createdOffset: -168, dueOffset: -150, completedOffset: -152 },
@@ -122,6 +122,7 @@ async function seed(): Promise<void> {
     const assignment = await assignmentRepo.save(
       assignmentRepo.create({
         taskId: tasks[row.taskIndex].id,
+        organizationId: organization.id,
         progress: row.progress,
         dueDate: addDaysISO(today, row.dueOffset),
         completedAt:

@@ -16,7 +16,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
-import { CreateAssignmentDto, UpdateAssignmentDto } from './dto/assignment.dto.js';
+import {
+  CreateAssignmentDto,
+  UpdateAssignmentDto,
+} from './dto/assignment.dto.js';
 import { AssignmentsService } from './assignments.service.js';
 
 class AssignmentQueryDto extends PaginationQueryDto {
@@ -35,23 +38,28 @@ class AssignmentQueryDto extends PaginationQueryDto {
 
 @ApiTags('assignments')
 @ApiBearerAuth()
+@Roles(UserRole.Admin)
 @Controller('assignments')
 export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}
 
   @Get()
-  findAll(@Query() query: AssignmentQueryDto) {
-    return this.assignmentsService.findAll(query);
+  findAll(@CurrentUser() user: User, @Query() query: AssignmentQueryDto) {
+    return this.assignmentsService.findAll(query, user.organizationId);
   }
 
   @Get('me')
   findMine(@CurrentUser() user: User, @Query() query: PaginationQueryDto) {
-    return this.assignmentsService.findMine(user.id, query);
+    return this.assignmentsService.findMine(
+      user.id,
+      query,
+      user.organizationId,
+    );
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.assignmentsService.findOne(id);
+  findOne(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.assignmentsService.findOne(id, user.organizationId);
   }
 
   @Post()
@@ -72,14 +80,22 @@ export class AssignmentsController {
   @Delete(':id')
   @Roles(UserRole.Admin)
   @HttpCode(204)
-  async remove(@Param('id') id: string) {
-    await this.assignmentsService.remove(id);
+  async remove(@CurrentUser() user: User, @Param('id') id: string) {
+    await this.assignmentsService.remove(id, user.organizationId);
   }
 
   @Delete(':id/assignees/:userId')
   @Roles(UserRole.Admin)
   @HttpCode(204)
-  async removeAssignee(@Param('id') id: string, @Param('userId') userId: string) {
-    await this.assignmentsService.removeAssignee(id, userId);
+  async removeAssignee(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    await this.assignmentsService.removeAssignee(
+      id,
+      userId,
+      user.organizationId,
+    );
   }
 }
