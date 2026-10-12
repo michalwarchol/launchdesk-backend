@@ -10,6 +10,7 @@ import { RolesGuard } from './common/guards/roles.guard.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
+import { OrganizationsModule } from './organizations/organizations.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     UsersModule,
     DocumentsModule,
+    OrganizationsModule,
     TasksModule,
     AssignmentsModule,
     DashboardModule,

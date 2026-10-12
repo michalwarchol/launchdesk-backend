@@ -11,7 +11,7 @@ import {
 } from '../common/dto/pagination.dto.js';
 import { StorageService } from '../storage/storage.service.js';
 import { Task } from '../tasks/entities/task.entity.js';
-import { User, UserRole } from '../users/entities/user.entity.js';
+import { MANAGER_ROLES, User } from '../users/entities/user.entity.js';
 import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
@@ -188,9 +188,9 @@ export class AssignmentsService {
     const isAssignee = assignment.assignees.some(
       (assignee) => assignee.userId === currentUser.id,
     );
-    const isAdmin = currentUser.role === UserRole.Admin;
+    const isManager = MANAGER_ROLES.includes(currentUser.role);
 
-    if (!isAdmin && !isAssignee) {
+    if (!isManager && !isAssignee) {
       throw new AppException('forbidden', HttpStatus.FORBIDDEN);
     }
 
@@ -201,7 +201,7 @@ export class AssignmentsService {
     } = {};
 
     if (dto.progress !== undefined) {
-      if (!isAssignee && !isAdmin) {
+      if (!isAssignee && !isManager) {
         throw new AppException('forbidden', HttpStatus.FORBIDDEN);
       }
 
@@ -210,7 +210,7 @@ export class AssignmentsService {
         dto.progress >= 1 ? new Date().toISOString().slice(0, 10) : null;
     }
 
-    if (isAdmin) {
+    if (isManager) {
       if (dto.dueDate !== undefined) {
         columns.dueDate = dto.dueDate;
       }

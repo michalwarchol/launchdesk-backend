@@ -20,6 +20,13 @@ export class AuthUserDto {
   role!: UserRole;
 
   @Expose()
+  organizationName!: string;
+
+  /** True when this user is the only owner left in the organization. */
+  @Expose()
+  isLastOwner!: boolean;
+
+  @Expose()
   avatar!: string;
 
   /** `false` for accounts that only ever signed in with Google or GitHub. */

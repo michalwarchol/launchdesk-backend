@@ -44,7 +44,7 @@ async function seed(): Promise<void> {
   const today = new Date();
 
   const usersData = [
-    ['John', 'Doe', 'john.doe@michalwarchol.com', UserRole.Admin, UserStatus.Active, passwordHash],
+    ['John', 'Doe', 'john.doe@michalwarchol.com', UserRole.Owner, UserStatus.Active, passwordHash],
     ['Jane', 'Smith', 'jane.smith@michalwarchol.com', UserRole.Admin, UserStatus.Active, passwordHash],
     ['Alex', 'Nowak', 'alex.nowak@michalwarchol.com', UserRole.User, UserStatus.Invited, null],
     ['Maria', 'Garcia', 'maria.garcia@michalwarchol.com', UserRole.User, UserStatus.Active, null],

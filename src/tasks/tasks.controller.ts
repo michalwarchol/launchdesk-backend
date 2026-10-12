@@ -14,7 +14,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
-import { User, UserRole } from '../users/entities/user.entity.js';
+import { MANAGER_ROLES, User } from '../users/entities/user.entity.js';
 import {
   CreateTaskDto,
   CreateTaskStepDto,
@@ -25,7 +25,7 @@ import { TasksService } from './tasks.service.js';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
-@Roles(UserRole.Admin)
+@Roles(...MANAGER_ROLES)
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
@@ -41,13 +41,13 @@ export class TasksController {
   }
 
   @Post()
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   create(@Body() dto: CreateTaskDto, @CurrentUser() user: User) {
     return this.tasksService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -57,14 +57,14 @@ export class TasksController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async remove(@CurrentUser() user: User, @Param('id') id: string) {
     await this.tasksService.remove(id, user.organizationId);
   }
 
   @Post(':id/steps')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   addStep(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -74,7 +74,7 @@ export class TasksController {
   }
 
   @Patch(':id/steps/reorder')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   reorderSteps(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -84,7 +84,7 @@ export class TasksController {
   }
 
   @Patch(':id/steps/:stepId')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   updateStep(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -95,7 +95,7 @@ export class TasksController {
   }
 
   @Delete(':id/steps/:stepId')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async removeStep(
     @CurrentUser() user: User,

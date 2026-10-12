@@ -22,7 +22,7 @@ import {
 } from './dto/user.dto.js';
 import { UserResponseDto } from './dto/user-response.dto.js';
 import { AssignmentAssignee } from '../assignments/entities/assignment-assignee.entity.js';
-import { User, UserStatus } from './entities/user.entity.js';
+import { User, UserRole, UserStatus } from './entities/user.entity.js';
 import { Directories } from '../storage/utils/directories.js';
 
 const USER_SORT_KEYS = [
@@ -63,9 +63,12 @@ export class UsersService {
     qb.skip((query.page - 1) * query.pageSize).take(query.pageSize);
 
     const [users, total] = await qb.getManyAndCount();
+    const ownerCount = await this.countOwners(organizationId);
 
     return {
-      data: await Promise.all(users.map((user) => this.toResponse(user))),
+      data: await Promise.all(
+        users.map((user) => this.toResponse(user, ownerCount)),
+      ),
       meta: buildPaginationMeta(query.page, query.pageSize, total),
     };
   }
@@ -82,10 +85,11 @@ export class UsersService {
     return this.toResponse(user);
   }
 
-  async create(
-    dto: CreateUserDto,
-    organizationId: string,
-  ): Promise<UserResponseDto> {
+  async create(dto: CreateUserDto, actor: User): Promise<UserResponseDto> {
+    if (dto.role === UserRole.Owner && actor.role !== UserRole.Owner) {
+      throw new AppException('cannotAssignOwner', HttpStatus.FORBIDDEN);
+    }
+
     const existing = await this.usersRepository.findOne({
       where: { email: dto.email.toLowerCase() },
     });
@@ -102,7 +106,7 @@ export class UsersService {
         role: dto.role,
         status: UserStatus.Invited,
         avatarUrl: '',
-        organizationId,
+        organizationId: actor.organizationId,
       }),
     );
 
@@ -114,15 +118,17 @@ export class UsersService {
   async update(
     id: string,
     dto: UpdateUserDto,
-    organizationId: string,
+    actor: User,
   ): Promise<UserResponseDto> {
     const user = await this.usersRepository.findOne({
-      where: { id, organizationId },
+      where: { id, organizationId: actor.organizationId },
     });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
+
+    await this.assertCanChangeMember(user, actor, dto.role);
 
     if (dto.firstName !== undefined) user.firstName = dto.firstName.trim();
     if (dto.lastName !== undefined) user.lastName = dto.lastName.trim();
@@ -132,34 +138,50 @@ export class UsersService {
     return this.toResponse(saved);
   }
 
-  async remove(
-    id: string,
-    currentUserId: string,
-    organizationId: string,
-  ): Promise<void> {
-    if (id === currentUserId) {
+  async remove(id: string, actor: User): Promise<void> {
+    if (id === actor.id) {
       throw new AppException('cannotDeleteSelf', HttpStatus.BAD_REQUEST);
     }
 
     const user = await this.usersRepository.findOne({
-      where: { id, organizationId },
+      where: { id, organizationId: actor.organizationId },
     });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
+    }
+
+    if (user.role === UserRole.Owner && actor.role !== UserRole.Owner) {
+      throw new AppException('cannotModifyOwner', HttpStatus.FORBIDDEN);
+    }
+
+    if (user.role === UserRole.Owner && (await this.isLastOwner(user))) {
+      throw new AppException('lastOwner', HttpStatus.BAD_REQUEST);
     }
 
     await this.assignmentAssigneesRepository.delete({ userId: id });
     await this.usersRepository.softRemove(user);
   }
 
-  async resendInvite(id: string, organizationId: string): Promise<void> {
+  async resendInvite(id: string, actor: User): Promise<void> {
     const user = await this.usersRepository.findOne({
-      where: { id, organizationId },
+      where: { id, organizationId: actor.organizationId },
     });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
+    }
+
+    if (user.role === UserRole.Owner && actor.role !== UserRole.Owner) {
+      throw new AppException('cannotModifyOwner', HttpStatus.FORBIDDEN);
+    }
+
+    if (
+      user.role === UserRole.Owner &&
+      actor.id !== user.id &&
+      (await this.isLastOwner(user))
+    ) {
+      throw new AppException('lastOwner', HttpStatus.BAD_REQUEST);
     }
 
     if (user.status !== UserStatus.Invited) {
@@ -222,18 +244,69 @@ export class UsersService {
     await this.usersRepository.save(user);
   }
 
-  async toResponse(user: User): Promise<UserResponseDto> {
+  async toResponse(user: User, ownerCount?: number): Promise<UserResponseDto> {
+    const count = ownerCount ?? (await this.countOwners(user.organizationId));
+
     return {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
+      isLastOwner: user.role === UserRole.Owner && count <= 1,
       avatar:
         (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
     };
+  }
+
+  private async countOwners(organizationId: string): Promise<number> {
+    return this.usersRepository.count({
+      where: { organizationId, role: UserRole.Owner },
+    });
+  }
+
+  private async isLastOwner(user: User): Promise<boolean> {
+    if (user.role !== UserRole.Owner) return false;
+
+    return (await this.countOwners(user.organizationId)) <= 1;
+  }
+
+  /**
+   * Admins cannot touch an owner or grant the owner role.
+   * Another owner can change a peer owner, but not the last one.
+   * The last owner can still rename themselves here; they cannot leave the role.
+   */
+  private async assertCanChangeMember(
+    user: User,
+    actor: User,
+    nextRole: UserRole | undefined,
+  ): Promise<void> {
+    const assigningOwner =
+      nextRole === UserRole.Owner && actor.role !== UserRole.Owner;
+
+    if (user.role === UserRole.Owner && actor.role !== UserRole.Owner) {
+      throw new AppException('cannotModifyOwner', HttpStatus.FORBIDDEN);
+    }
+
+    if (assigningOwner) {
+      throw new AppException('cannotAssignOwner', HttpStatus.FORBIDDEN);
+    }
+
+    const targetIsLastOwner = await this.isLastOwner(user);
+    const leavingOwnerRole =
+      targetIsLastOwner &&
+      nextRole !== undefined &&
+      nextRole !== UserRole.Owner;
+
+    if (targetIsLastOwner && actor.id !== user.id) {
+      throw new AppException('lastOwner', HttpStatus.BAD_REQUEST);
+    }
+
+    if (leavingOwnerRole) {
+      throw new AppException('lastOwner', HttpStatus.BAD_REQUEST);
+    }
   }
 
   private async createInviteToken(user: User): Promise<void> {

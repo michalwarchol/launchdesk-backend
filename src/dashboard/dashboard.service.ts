@@ -123,6 +123,7 @@ export class DashboardService {
           : 0,
         users: users.length,
         admins: users.filter((user) => user.role === UserRole.Admin).length,
+        owners: users.filter((user) => user.role === UserRole.Owner).length,
         usersWithActiveWork,
       },
       statusBreakdown: [

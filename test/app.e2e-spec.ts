@@ -61,8 +61,10 @@ describe('LaunchDesk API (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
-    expect(response.body.role).toBe('admin');
+    expect(response.body.role).toBe('owner');
     expect(response.body.email).toBe(adminEmail);
+    expect(response.body.organizationName).toBe('E2E Org');
+    expect(response.body.isLastOwner).toBe(true);
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -128,7 +130,7 @@ describe('LaunchDesk API (e2e)', () => {
       .expect(200);
 
     const assignee = usersResponse.body.data.find(
-      (user: { role: string }) => user.role === 'admin',
+      (user: { role: string }) => user.role === 'owner',
     );
 
     const createResponse = await request(app.getHttpServer())
@@ -152,6 +154,7 @@ describe('LaunchDesk API (e2e)', () => {
       .expect(200);
 
     expect(response.body.totals).toBeDefined();
+    expect(response.body.totals.owners).toBeGreaterThanOrEqual(1);
     expect(response.body.statusBreakdown).toHaveLength(4);
   });
 
@@ -331,5 +334,155 @@ describe('LaunchDesk API (e2e)', () => {
       .get(`/api/documents/${document.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
+  });
+
+  it('keeps owner management exclusive to owners', async () => {
+    const mail = app.get(MailService);
+    let inviteToken = '';
+    const spy = vi
+      .spyOn(mail, 'sendInviteEmail')
+      .mockImplementation(async (_email, token) => {
+        inviteToken = token;
+      });
+
+    const acceptInvite = async (email: string, role: 'admin' | 'owner') => {
+      await request(app.getHttpServer())
+        .post('/api/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          firstName: 'Invited',
+          lastName: role,
+          email,
+          role,
+        })
+        .expect(201);
+
+      const acceptResponse = await request(app.getHttpServer())
+        .post('/api/auth/invite/accept')
+        .send({ token: inviteToken, password: 'password123' })
+        .expect(201);
+
+      return acceptResponse.body.accessToken as string;
+    };
+
+    const adminMemberToken = await acceptInvite(
+      `e2e-admin-member-${Date.now()}@example.com`,
+      'admin',
+    );
+
+    const ownerResponse = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const ownerId = ownerResponse.body.id as string;
+
+    await request(app.getHttpServer())
+      .get('/api/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const renameResponse = await request(app.getHttpServer())
+      .patch('/api/organizations/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Renamed E2E Org' })
+      .expect(200);
+
+    expect(renameResponse.body.name).toBe('Renamed E2E Org');
+
+    const renamedMe = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(renamedMe.body.organizationName).toBe('Renamed E2E Org');
+
+    await request(app.getHttpServer())
+      .patch('/api/organizations/me')
+      .set('Authorization', `Bearer ${adminMemberToken}`)
+      .send({ name: 'Admin Rename' })
+      .expect(403);
+
+    const assignOwner = await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminMemberToken}`)
+      .send({
+        firstName: 'Blocked',
+        lastName: 'Owner',
+        email: `e2e-blocked-owner-${Date.now()}@example.com`,
+        role: 'owner',
+      })
+      .expect(403);
+
+    expect(assignOwner.body.code).toBe('cannotAssignOwner');
+
+    const editOwner = await request(app.getHttpServer())
+      .patch(`/api/users/${ownerId}`)
+      .set('Authorization', `Bearer ${adminMemberToken}`)
+      .send({ firstName: 'Nope' })
+      .expect(403);
+
+    expect(editOwner.body.code).toBe('cannotModifyOwner');
+
+    const deleteOwner = await request(app.getHttpServer())
+      .delete(`/api/users/${ownerId}`)
+      .set('Authorization', `Bearer ${adminMemberToken}`)
+      .expect(403);
+
+    expect(deleteOwner.body.code).toBe('cannotModifyOwner');
+
+    const demoteSelf = await request(app.getHttpServer())
+      .patch(`/api/users/${ownerId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'admin' })
+      .expect(400);
+
+    expect(demoteSelf.body.code).toBe('lastOwner');
+
+    const deleteSelf = await request(app.getHttpServer())
+      .delete(`/api/users/${ownerId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+
+    expect(deleteSelf.body.code).toBe('cannotDeleteSelf');
+
+    const secondOwnerEmail = `e2e-second-owner-${Date.now()}@example.com`;
+    const secondOwnerToken = await acceptInvite(secondOwnerEmail, 'owner');
+
+    const secondOwner = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${secondOwnerToken}`)
+      .expect(200);
+
+    const demoted = await request(app.getHttpServer())
+      .patch(`/api/users/${secondOwner.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'admin' })
+      .expect(200);
+
+    expect(demoted.body.role).toBe('admin');
+
+    const restored = await request(app.getHttpServer())
+      .patch(`/api/users/${secondOwner.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'owner' })
+      .expect(200);
+
+    expect(restored.body.role).toBe('owner');
+
+    await request(app.getHttpServer())
+      .delete(`/api/users/${secondOwner.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(204);
+
+    const demoteLast = await request(app.getHttpServer())
+      .patch(`/api/users/${ownerId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'user' })
+      .expect(400);
+
+    expect(demoteLast.body.code).toBe('lastOwner');
+
+    spy.mockRestore();
   });
 });
