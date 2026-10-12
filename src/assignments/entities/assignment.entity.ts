@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import type { Relation } from 'typeorm';
 
+import { Organization } from '../../organizations/entities/organization.entity.js';
 import { Task } from '../../tasks/entities/task.entity.js';
 import { User } from '../../users/entities/user.entity.js';
 import { AssignmentAssignee } from './assignment-assignee.entity.js';
@@ -18,6 +19,13 @@ import { AssignmentAssignee } from './assignment-assignee.entity.js';
 export class Assignment {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  organizationId!: string;
+
+  @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'organizationId' })
+  organization!: Relation<Organization>;
 
   @Column({ type: 'uuid' })
   taskId!: string;
@@ -38,7 +46,9 @@ export class Assignment {
   @Column({ type: 'uuid', nullable: true })
   createdById!: string | null;
 
-  @ManyToOne(() => User, (user) => user.createdAssignments, { onDelete: 'SET NULL' })
+  @ManyToOne(() => User, (user) => user.createdAssignments, {
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'createdById' })
   createdBy!: Relation<User>;
 

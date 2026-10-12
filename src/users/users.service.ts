@@ -25,7 +25,13 @@ import { AssignmentAssignee } from '../assignments/entities/assignment-assignee.
 import { User, UserStatus } from './entities/user.entity.js';
 import { Directories } from '../storage/utils/directories.js';
 
-const USER_SORT_KEYS = ['firstName', 'lastName', 'email', 'role', 'createdAt'] as const;
+const USER_SORT_KEYS = [
+  'firstName',
+  'lastName',
+  'email',
+  'role',
+  'createdAt',
+] as const;
 
 @Injectable()
 export class UsersService {
@@ -40,9 +46,14 @@ export class UsersService {
     private readonly storageService: StorageService,
   ) {}
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<UserResponseDto>> {
+  async findAll(
+    query: PaginationQueryDto,
+    organizationId: string,
+  ): Promise<PaginatedResponse<UserResponseDto>> {
     const sort = parseSort(query.sort, USER_SORT_KEYS);
-    const qb = this.usersRepository.createQueryBuilder('user');
+    const qb = this.usersRepository
+      .createQueryBuilder('user')
+      .where('user.organizationId = :organizationId', { organizationId });
 
     qb.orderBy(
       sort ? `user.${sort.key}` : 'user.createdAt',
@@ -59,8 +70,10 @@ export class UsersService {
     };
   }
 
-  async findOne(id: string): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+  async findOne(id: string, organizationId: string): Promise<UserResponseDto> {
+    const user = await this.usersRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -69,7 +82,10 @@ export class UsersService {
     return this.toResponse(user);
   }
 
-  async create(dto: CreateUserDto, organizationId: string): Promise<UserResponseDto> {
+  async create(
+    dto: CreateUserDto,
+    organizationId: string,
+  ): Promise<UserResponseDto> {
     const existing = await this.usersRepository.findOne({
       where: { email: dto.email.toLowerCase() },
     });
@@ -95,8 +111,14 @@ export class UsersService {
     return this.toResponse(user);
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    organizationId: string,
+  ): Promise<UserResponseDto> {
+    const user = await this.usersRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -110,12 +132,18 @@ export class UsersService {
     return this.toResponse(saved);
   }
 
-  async remove(id: string, currentUserId: string): Promise<void> {
+  async remove(
+    id: string,
+    currentUserId: string,
+    organizationId: string,
+  ): Promise<void> {
     if (id === currentUserId) {
       throw new AppException('cannotDeleteSelf', HttpStatus.BAD_REQUEST);
     }
 
-    const user = await this.usersRepository.findOne({ where: { id } });
+    const user = await this.usersRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -125,8 +153,10 @@ export class UsersService {
     await this.usersRepository.softRemove(user);
   }
 
-  async resendInvite(id: string): Promise<void> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+  async resendInvite(id: string, organizationId: string): Promise<void> {
+    const user = await this.usersRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!user) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -139,7 +169,10 @@ export class UsersService {
     await this.createInviteToken(user);
   }
 
-  async updateProfile(user: User, dto: UpdateProfileDto): Promise<UserResponseDto> {
+  async updateProfile(
+    user: User,
+    dto: UpdateProfileDto,
+  ): Promise<UserResponseDto> {
     if (dto.avatar !== undefined && !dto.avatar.startsWith('data:image/')) {
       throw new AppException('avatarInvalid', HttpStatus.BAD_REQUEST);
     }
@@ -148,7 +181,8 @@ export class UsersService {
     user.lastName = dto.lastName.trim();
 
     if (dto.avatar !== undefined) {
-      const [, metadata, base64] = dto.avatar.match(/^data:(image\/[^;]+);base64,(.+)$/) ?? [];
+      const [, metadata, base64] =
+        dto.avatar.match(/^data:(image\/[^;]+);base64,(.+)$/) ?? [];
 
       if (!metadata || !base64) {
         throw new AppException('avatarInvalid', HttpStatus.BAD_REQUEST);
@@ -156,7 +190,12 @@ export class UsersService {
 
       const extension = metadata.split('/')[1] ?? 'png';
       const buffer = Buffer.from(base64, 'base64');
-      const key = await this.storageService.uploadObject(Directories.Avatars, buffer, metadata, extension);
+      const key = await this.storageService.uploadObject(
+        Directories.Avatars,
+        buffer,
+        metadata,
+        extension,
+      );
       user.avatarUrl = key;
     }
 
@@ -190,7 +229,8 @@ export class UsersService {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      avatar: (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
+      avatar:
+        (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
     };

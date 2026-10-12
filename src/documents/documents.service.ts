@@ -32,9 +32,14 @@ export class DocumentsService {
     private readonly storageService: StorageService,
   ) {}
 
-  async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<DocumentResponseDto>> {
+  async findAll(
+    query: PaginationQueryDto,
+    organizationId: string,
+  ): Promise<PaginatedResponse<DocumentResponseDto>> {
     const sort = parseSort(query.sort, DOCUMENT_SORT_KEYS);
-    const qb = this.documentsRepository.createQueryBuilder('document');
+    const qb = this.documentsRepository
+      .createQueryBuilder('document')
+      .where('document.organizationId = :organizationId', { organizationId });
 
     qb.orderBy(
       sort ? `document.${sort.key}` : 'document.createdAt',
@@ -51,8 +56,13 @@ export class DocumentsService {
     };
   }
 
-  async findOne(id: string): Promise<DocumentResponseDto> {
-    const document = await this.documentsRepository.findOne({ where: { id } });
+  async findOne(
+    id: string,
+    organizationId: string,
+  ): Promise<DocumentResponseDto> {
+    const document = await this.documentsRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!document) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -61,7 +71,10 @@ export class DocumentsService {
     return this.toResponse(document);
   }
 
-  async upload(files: UploadedFile[], user: User): Promise<DocumentResponseDto[]> {
+  async upload(
+    files: UploadedFile[],
+    user: User,
+  ): Promise<DocumentResponseDto[]> {
     const saved: Document[] = [];
 
     for (const file of files) {
@@ -87,6 +100,7 @@ export class DocumentsService {
           mimeType: file.mimetype,
           s3Key,
           uploadedById: user.id,
+          organizationId: user.organizationId,
         }),
       );
 
@@ -96,8 +110,14 @@ export class DocumentsService {
     return saved.map((document) => this.toResponse(document));
   }
 
-  async update(id: string, dto: UpdateDocumentDto): Promise<DocumentResponseDto> {
-    const document = await this.documentsRepository.findOne({ where: { id } });
+  async update(
+    id: string,
+    dto: UpdateDocumentDto,
+    organizationId: string,
+  ): Promise<DocumentResponseDto> {
+    const document = await this.documentsRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!document) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -108,14 +128,14 @@ export class DocumentsService {
     return this.toResponse(saved);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.removeMany([id]);
+  async remove(id: string, organizationId: string): Promise<void> {
+    await this.removeMany([id], organizationId);
   }
 
-  async removeMany(ids: string[]): Promise<void> {
+  async removeMany(ids: string[], organizationId: string): Promise<void> {
     const uniqueIds = [...new Set(ids)];
     const documents = await this.documentsRepository.find({
-      where: { id: In(uniqueIds) },
+      where: { id: In(uniqueIds), organizationId },
     });
 
     if (documents.length !== uniqueIds.length) {
@@ -129,8 +149,10 @@ export class DocumentsService {
     await this.documentsRepository.delete(uniqueIds);
   }
 
-  async getDownloadUrl(id: string): Promise<string> {
-    const document = await this.documentsRepository.findOne({ where: { id } });
+  async getDownloadUrl(id: string, organizationId: string): Promise<string> {
+    const document = await this.documentsRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!document) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -140,7 +162,10 @@ export class DocumentsService {
       throw new AppException('fileMissing', HttpStatus.NOT_FOUND);
     }
 
-    return this.storageService.getPresignedDownloadUrl(document.s3Key, document.name);
+    return this.storageService.getPresignedDownloadUrl(
+      document.s3Key,
+      document.name,
+    );
   }
 
   toResponse(document: Document): DocumentResponseDto {

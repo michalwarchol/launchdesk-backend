@@ -12,7 +12,10 @@ import {
 import { StorageService } from '../storage/storage.service.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { User, UserRole } from '../users/entities/user.entity.js';
-import { CreateAssignmentDto, UpdateAssignmentDto } from './dto/assignment.dto.js';
+import {
+  CreateAssignmentDto,
+  UpdateAssignmentDto,
+} from './dto/assignment.dto.js';
 import { AssignmentResponseDto } from './dto/assignment-response.dto.js';
 import { AssignmentAssignee } from './entities/assignment-assignee.entity.js';
 import { Assignment } from './entities/assignment.entity.js';
@@ -43,13 +46,17 @@ export class AssignmentsService {
     private readonly storageService: StorageService,
   ) {}
 
-  async findAll(query: AssignmentQuery): Promise<PaginatedResponse<AssignmentResponseDto>> {
+  async findAll(
+    query: AssignmentQuery,
+    organizationId: string,
+  ): Promise<PaginatedResponse<AssignmentResponseDto>> {
     const sort = parseSort(query.sort, ASSIGNMENT_SORT_KEYS);
     const qb = this.assignmentsRepository
       .createQueryBuilder('assignment')
       .leftJoinAndSelect('assignment.task', 'task')
       .leftJoinAndSelect('assignment.assignees', 'assignmentAssignee')
-      .leftJoinAndSelect('assignmentAssignee.user', 'user');
+      .leftJoinAndSelect('assignmentAssignee.user', 'user')
+      .where('assignment.organizationId = :organizationId', { organizationId });
 
     if (query.taskId) {
       qb.andWhere('assignment.taskId = :taskId', { taskId: query.taskId });
@@ -70,8 +77,10 @@ export class AssignmentsService {
     const filtered = query.status
       ? assignments.filter(
           (assignment) =>
-            deriveAssignmentStatus(Number(assignment.progress), assignment.dueDate) ===
-            query.status,
+            deriveAssignmentStatus(
+              Number(assignment.progress),
+              assignment.dueDate,
+            ) === query.status,
         )
       : assignments;
 
@@ -81,18 +90,27 @@ export class AssignmentsService {
     const data = filtered.slice(start, start + pageSize);
 
     return {
-      data: await Promise.all(data.map((assignment) => this.toResponse(assignment))),
+      data: await Promise.all(
+        data.map((assignment) => this.toResponse(assignment)),
+      ),
       meta: buildPaginationMeta(page, pageSize, filtered.length),
     };
   }
 
-  async findMine(userId: string, query: PaginationQueryDto) {
-    return this.findAll({ ...query, assigneeId: userId });
+  async findMine(
+    userId: string,
+    query: PaginationQueryDto,
+    organizationId: string,
+  ) {
+    return this.findAll({ ...query, assigneeId: userId }, organizationId);
   }
 
-  async findOne(id: string): Promise<AssignmentResponseDto> {
+  async findOne(
+    id: string,
+    organizationId: string,
+  ): Promise<AssignmentResponseDto> {
     const assignment = await this.assignmentsRepository.findOne({
-      where: { id },
+      where: { id, organizationId },
       relations: {
         task: true,
         assignees: {
@@ -108,15 +126,20 @@ export class AssignmentsService {
     return this.toResponse(assignment);
   }
 
-  async create(dto: CreateAssignmentDto, user: User): Promise<AssignmentResponseDto> {
-    const task = await this.tasksRepository.findOne({ where: { id: dto.taskId } });
+  async create(
+    dto: CreateAssignmentDto,
+    user: User,
+  ): Promise<AssignmentResponseDto> {
+    const task = await this.tasksRepository.findOne({
+      where: { id: dto.taskId, organizationId: user.organizationId },
+    });
 
     if (!task) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
 
     const assignees = await this.usersRepository.find({
-      where: { id: In(dto.assigneeIds) },
+      where: { id: In(dto.assigneeIds), organizationId: user.organizationId },
     });
 
     if (assignees.length !== dto.assigneeIds.length) {
@@ -126,6 +149,7 @@ export class AssignmentsService {
     const assignment = await this.assignmentsRepository.save(
       this.assignmentsRepository.create({
         taskId: dto.taskId,
+        organizationId: user.organizationId,
         dueDate: dto.dueDate,
         progress: '0',
         completedAt: null,
@@ -142,7 +166,7 @@ export class AssignmentsService {
       ),
     );
 
-    return this.findOne(assignment.id);
+    return this.findOne(assignment.id, user.organizationId);
   }
 
   async update(
@@ -151,7 +175,7 @@ export class AssignmentsService {
     currentUser: User,
   ): Promise<AssignmentResponseDto> {
     const assignment = await this.assignmentsRepository.findOne({
-      where: { id },
+      where: { id, organizationId: currentUser.organizationId },
       relations: {
         assignees: true,
       },
@@ -170,7 +194,11 @@ export class AssignmentsService {
       throw new AppException('forbidden', HttpStatus.FORBIDDEN);
     }
 
-    const columns: { progress?: string; completedAt?: string | null; dueDate?: string } = {};
+    const columns: {
+      progress?: string;
+      completedAt?: string | null;
+      dueDate?: string;
+    } = {};
 
     if (dto.progress !== undefined) {
       if (!isAssignee && !isAdmin) {
@@ -178,7 +206,8 @@ export class AssignmentsService {
       }
 
       columns.progress = dto.progress.toFixed(2);
-      columns.completedAt = dto.progress >= 1 ? new Date().toISOString().slice(0, 10) : null;
+      columns.completedAt =
+        dto.progress >= 1 ? new Date().toISOString().slice(0, 10) : null;
     }
 
     if (isAdmin) {
@@ -187,6 +216,17 @@ export class AssignmentsService {
       }
 
       if (dto.assigneeIds !== undefined) {
+        const assignees = await this.usersRepository.find({
+          where: {
+            id: In(dto.assigneeIds),
+            organizationId: currentUser.organizationId,
+          },
+        });
+
+        if (assignees.length !== dto.assigneeIds.length) {
+          throw new AppException('invalidAssignee', HttpStatus.BAD_REQUEST);
+        }
+
         await this.assignmentAssigneesRepository.delete({ assignmentId: id });
         await this.assignmentAssigneesRepository.save(
           dto.assigneeIds.map((userId) =>
@@ -205,11 +245,13 @@ export class AssignmentsService {
       await this.assignmentsRepository.update(id, columns);
     }
 
-    return this.findOne(id);
+    return this.findOne(id, currentUser.organizationId);
   }
 
-  async remove(id: string): Promise<void> {
-    const assignment = await this.assignmentsRepository.findOne({ where: { id } });
+  async remove(id: string, organizationId: string): Promise<void> {
+    const assignment = await this.assignmentsRepository.findOne({
+      where: { id, organizationId },
+    });
 
     if (!assignment) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
@@ -218,9 +260,13 @@ export class AssignmentsService {
     await this.assignmentsRepository.remove(assignment);
   }
 
-  async removeAssignee(assignmentId: string, userId: string): Promise<void> {
+  async removeAssignee(
+    assignmentId: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<void> {
     const assignment = await this.assignmentsRepository.findOne({
-      where: { id: assignmentId },
+      where: { id: assignmentId, organizationId },
     });
 
     if (!assignment) {
@@ -247,7 +293,9 @@ export class AssignmentsService {
           id: assignee.user.id,
           firstName: assignee.user.firstName,
           lastName: assignee.user.lastName,
-          avatar: await this.storageService.resolveDownloadUrl(assignee.user.avatarUrl),
+          avatar: await this.storageService.resolveDownloadUrl(
+            assignee.user.avatarUrl,
+          ),
         })),
       ),
       progress: Number(assignment.progress),

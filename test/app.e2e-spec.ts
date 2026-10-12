@@ -2,8 +2,15 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { DataSource } from 'typeorm';
 
 import { AppModule } from '../src/app.module.js';
+import {
+  Document,
+  DocumentType,
+} from '../src/documents/entities/document.entity.js';
+import { MailService } from '../src/mail/mail.service.js';
+import { User } from '../src/users/entities/user.entity.js';
 
 describe('LaunchDesk API (e2e)', () => {
   let app: INestApplication<App>;
@@ -91,7 +98,13 @@ describe('LaunchDesk API (e2e)', () => {
       .send({
         name: 'E2E Task',
         description: 'Created in e2e test',
-        steps: [{ name: 'Step 1', description: '<p>Step body</p>', attachmentIds: [] }],
+        steps: [
+          {
+            name: 'Step 1',
+            description: '<p>Step body</p>',
+            attachmentIds: [],
+          },
+        ],
       })
       .expect(201);
 
@@ -103,7 +116,9 @@ describe('LaunchDesk API (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
-    expect(listResponse.body.data.some((task: { id: string }) => task.id === taskId)).toBe(true);
+    expect(
+      listResponse.body.data.some((task: { id: string }) => task.id === taskId),
+    ).toBe(true);
   });
 
   it('creates and lists assignments as admin', async () => {
@@ -160,5 +175,161 @@ describe('LaunchDesk API (e2e)', () => {
       .delete(`/api/assignments/${assignmentId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(204);
+  });
+
+  it('limits the user role to profile endpoints', async () => {
+    const mail = app.get(MailService);
+    let inviteToken = '';
+    const spy = vi
+      .spyOn(mail, 'sendInviteEmail')
+      .mockImplementation(async (_email, token) => {
+        inviteToken = token;
+      });
+
+    const email = `e2e-member-${Date.now()}@example.com`;
+
+    await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        firstName: 'Member',
+        lastName: 'User',
+        email,
+        role: 'user',
+      })
+      .expect(201);
+
+    spy.mockRestore();
+
+    const acceptResponse = await request(app.getHttpServer())
+      .post('/api/auth/invite/accept')
+      .send({ token: inviteToken, password: 'password123' })
+      .expect(201);
+
+    const userToken = acceptResponse.body.accessToken as string;
+
+    const meResponse = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(200);
+
+    expect(meResponse.body.role).toBe('user');
+
+    await request(app.getHttpServer())
+      .patch('/api/users/me')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ firstName: 'Member', lastName: 'Updated' })
+      .expect(200);
+
+    for (const path of [
+      '/api/users',
+      '/api/documents',
+      '/api/tasks',
+      '/api/assignments',
+      '/api/dashboard/stats',
+    ]) {
+      await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(403);
+    }
+
+    await request(app.getHttpServer())
+      .get('/api/documents/00000000-0000-4000-8000-000000000000/download')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(403);
+  });
+
+  it('hides resources that belong to another organization', async () => {
+    const otherEmail = `e2e-other-${Date.now()}@example.com`;
+    const otherResponse = await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        firstName: 'Other',
+        lastName: 'Admin',
+        email: otherEmail,
+        password: 'password123',
+        organizationName: 'Other Org',
+      })
+      .expect(201);
+
+    const otherToken = otherResponse.body.accessToken as string;
+
+    const meResponse = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const adminId = meResponse.body.id as string;
+
+    await request(app.getHttpServer())
+      .get(`/api/users/${adminId}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .get(`/api/tasks/${taskId}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(404);
+
+    const usersResponse = await request(app.getHttpServer())
+      .get('/api/users')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(200);
+
+    expect(
+      usersResponse.body.data.some(
+        (user: { id: string }) => user.id === adminId,
+      ),
+    ).toBe(false);
+
+    const tasksResponse = await request(app.getHttpServer())
+      .get('/api/tasks')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(200);
+
+    expect(
+      tasksResponse.body.data.some(
+        (task: { id: string }) => task.id === taskId,
+      ),
+    ).toBe(false);
+
+    const dataSource = app.get(DataSource);
+    const admin = await dataSource
+      .getRepository(User)
+      .findOneByOrFail({ id: adminId });
+    const document = await dataSource.getRepository(Document).save(
+      dataSource.getRepository(Document).create({
+        name: 'secret.pdf',
+        type: DocumentType.Text,
+        extension: 'pdf',
+        size: '10',
+        mimeType: 'application/pdf',
+        s3Key: 'e2e/secret.pdf',
+        uploadedById: adminId,
+        organizationId: admin.organizationId,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .get(`/api/documents/${document.id}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(404);
+
+    const documentsResponse = await request(app.getHttpServer())
+      .get('/api/documents')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(200);
+
+    expect(
+      documentsResponse.body.data.some(
+        (item: { id: string }) => item.id === document.id,
+      ),
+    ).toBe(false);
+
+    await request(app.getHttpServer())
+      .get(`/api/documents/${document.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
   });
 });
