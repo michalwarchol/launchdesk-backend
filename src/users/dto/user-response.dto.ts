@@ -19,6 +19,10 @@ export class UserResponseDto {
   @Expose()
   role!: UserRole;
 
+  /** True when this user is the only owner left in the organization. */
+  @Expose()
+  isLastOwner!: boolean;
+
   @Expose()
   avatar!: string;
 

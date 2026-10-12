@@ -17,6 +17,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DATABASE_NAME ?? 'launchdesk',
   entities,
   migrations,
+  migrationsTransactionMode: 'each',
   synchronize: false,
   logging: process.env.NODE_ENV === 'development',
 });

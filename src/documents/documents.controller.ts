@@ -19,7 +19,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { UploadedFile } from '../common/types/uploaded-file.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
-import { User, UserRole } from '../users/entities/user.entity.js';
+import { MANAGER_ROLES, User } from '../users/entities/user.entity.js';
 import { DocumentsService } from './documents.service.js';
 import {
   DeleteManyDocumentsDto,
@@ -28,7 +28,7 @@ import {
 
 @ApiTags('documents')
 @ApiBearerAuth()
-@Roles(UserRole.Admin)
+@Roles(...MANAGER_ROLES)
 @Controller('documents')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
@@ -44,7 +44,7 @@ export class DocumentsController {
   }
 
   @Post()
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FilesInterceptor('files'))
   upload(@UploadedFiles() files: UploadedFile[], @CurrentUser() user: User) {
@@ -52,7 +52,7 @@ export class DocumentsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -62,7 +62,7 @@ export class DocumentsController {
   }
 
   @Delete()
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async removeMany(
     @CurrentUser() user: User,
@@ -72,7 +72,7 @@ export class DocumentsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async remove(@CurrentUser() user: User, @Param('id') id: string) {
     await this.documentsService.remove(id, user.organizationId);

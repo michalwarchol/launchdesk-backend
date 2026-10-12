@@ -20,12 +20,12 @@ import {
   UpdateProfileDto,
   UpdateUserDto,
 } from './dto/user.dto.js';
-import { User, UserRole } from './entities/user.entity.js';
+import { MANAGER_ROLES, User, UserRole } from './entities/user.entity.js';
 import { UsersService } from './users.service.js';
 
 @ApiTags('users')
 @ApiBearerAuth()
-@Roles(UserRole.Admin)
+@Roles(...MANAGER_ROLES)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -36,13 +36,13 @@ export class UsersController {
   }
 
   @Patch('me')
-  @Roles(UserRole.Admin, UserRole.User)
+  @Roles(...MANAGER_ROLES, UserRole.User)
   updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(user, dto);
   }
 
   @Post('me/change-password')
-  @Roles(UserRole.Admin, UserRole.User)
+  @Roles(...MANAGER_ROLES, UserRole.User)
   @HttpCode(204)
   async changePassword(
     @CurrentUser() user: User,
@@ -57,32 +57,32 @@ export class UsersController {
   }
 
   @Post()
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   create(@CurrentUser() user: User, @Body() dto: CreateUserDto) {
-    return this.usersService.create(dto, user.organizationId);
+    return this.usersService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   update(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
   ) {
-    return this.usersService.update(id, dto, user.organizationId);
+    return this.usersService.update(id, dto, user);
   }
 
   @Delete(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async remove(@Param('id') id: string, @CurrentUser() user: User) {
-    await this.usersService.remove(id, user.id, user.organizationId);
+    await this.usersService.remove(id, user);
   }
 
   @Post(':id/resend-invite')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async resendInvite(@CurrentUser() user: User, @Param('id') id: string) {
-    await this.usersService.resendInvite(id, user.organizationId);
+    await this.usersService.resendInvite(id, user);
   }
 }

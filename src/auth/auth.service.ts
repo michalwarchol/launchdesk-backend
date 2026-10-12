@@ -11,8 +11,17 @@ import { MailService } from '../mail/mail.service.js';
 import { Organization } from '../organizations/entities/organization.entity.js';
 import { StorageService } from '../storage/storage.service.js';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity.js';
-import { AcceptInviteDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto/auth.dto.js';
-import { AuthTokensDto, AuthUserDto, InviteLookupDto } from './dto/auth-response.dto.js';
+import {
+  AcceptInviteDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+} from './dto/auth.dto.js';
+import {
+  AuthTokensDto,
+  AuthUserDto,
+  InviteLookupDto,
+} from './dto/auth-response.dto.js';
 import { InviteToken } from './entities/invite-token.entity.js';
 import { OAuthExchangeCode } from './entities/oauth-exchange-code.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
@@ -49,7 +58,9 @@ export class AuthService {
     }
 
     const organization = await this.organizationsRepository.save(
-      this.organizationsRepository.create({ name: dto.organizationName.trim() }),
+      this.organizationsRepository.create({
+        name: dto.organizationName.trim(),
+      }),
     );
 
     const user = await this.usersRepository.save(
@@ -58,7 +69,7 @@ export class AuthService {
         lastName: dto.lastName.trim(),
         email: dto.email.toLowerCase(),
         passwordHash: await bcrypt.hash(dto.password, 10),
-        role: UserRole.Admin,
+        role: UserRole.Owner,
         status: UserStatus.Active,
         avatarUrl: '',
         organizationId: organization.id,
@@ -257,13 +268,25 @@ export class AuthService {
   }
 
   async toAuthUser(user: User): Promise<AuthUserDto> {
+    const [organization, ownerCount] = await Promise.all([
+      this.organizationsRepository.findOne({
+        where: { id: user.organizationId },
+      }),
+      this.usersRepository.count({
+        where: { organizationId: user.organizationId, role: UserRole.Owner },
+      }),
+    ]);
+
     return {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      avatar: (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
+      organizationName: organization?.name ?? '',
+      isLastOwner: user.role === UserRole.Owner && ownerCount <= 1,
+      avatar:
+        (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
       hasPassword: user.passwordHash !== null,
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
@@ -275,7 +298,9 @@ export class AuthService {
       { sub: user.id, role: user.role },
       {
         secret: this.config.get<string>('JWT_ACCESS_SECRET')!,
-        expiresIn: this.config.get<string>('JWT_ACCESS_TTL')! as `${number}${'s' | 'm' | 'h' | 'd'}`,
+        expiresIn: this.config.get<string>(
+          'JWT_ACCESS_TTL',
+        )! as `${number}${'s' | 'm' | 'h' | 'd'}`,
       },
     );
 

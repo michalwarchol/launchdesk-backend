@@ -22,9 +22,13 @@ import { Organization } from '../../organizations/entities/organization.entity.j
 import { Task } from '../../tasks/entities/task.entity.js';
 
 export enum UserRole {
+  Owner = 'owner',
   Admin = 'admin',
   User = 'user',
 }
+
+/** Roles that manage every resource in an organization. */
+export const MANAGER_ROLES: UserRole[] = [UserRole.Owner, UserRole.Admin];
 
 export enum UserStatus {
   Active = 'active',

@@ -15,7 +15,7 @@ import { IsIn, IsOptional, IsUUID } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
-import { User, UserRole } from '../users/entities/user.entity.js';
+import { MANAGER_ROLES, User } from '../users/entities/user.entity.js';
 import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
@@ -38,7 +38,7 @@ class AssignmentQueryDto extends PaginationQueryDto {
 
 @ApiTags('assignments')
 @ApiBearerAuth()
-@Roles(UserRole.Admin)
+@Roles(...MANAGER_ROLES)
 @Controller('assignments')
 export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}
@@ -63,7 +63,7 @@ export class AssignmentsController {
   }
 
   @Post()
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   create(@Body() dto: CreateAssignmentDto, @CurrentUser() user: User) {
     return this.assignmentsService.create(dto, user);
   }
@@ -78,14 +78,14 @@ export class AssignmentsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async remove(@CurrentUser() user: User, @Param('id') id: string) {
     await this.assignmentsService.remove(id, user.organizationId);
   }
 
   @Delete(':id/assignees/:userId')
-  @Roles(UserRole.Admin)
+  @Roles(...MANAGER_ROLES)
   @HttpCode(204)
   async removeAssignee(
     @CurrentUser() user: User,
