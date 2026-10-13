@@ -17,6 +17,7 @@ import {
   UpdateAssignmentDto,
 } from './dto/assignment.dto.js';
 import { AssignmentResponseDto } from './dto/assignment-response.dto.js';
+import { MyAssignmentResponseDto } from './dto/my-assignment-response.dto.js';
 import { AssignmentAssignee } from './entities/assignment-assignee.entity.js';
 import { Assignment } from './entities/assignment.entity.js';
 import {
@@ -101,8 +102,33 @@ export class AssignmentsService {
     userId: string,
     query: PaginationQueryDto,
     organizationId: string,
-  ) {
-    return this.findAll({ ...query, assigneeId: userId }, organizationId);
+  ): Promise<PaginatedResponse<MyAssignmentResponseDto>> {
+    const sort = parseSort(query.sort, ASSIGNMENT_SORT_KEYS);
+    const page = query.page;
+    const pageSize = query.pageSize;
+
+    const [assignments, total] = await this.assignmentsRepository
+      .createQueryBuilder('assignment')
+      .innerJoinAndSelect('assignment.task', 'task')
+      .innerJoin(
+        'assignment.assignees',
+        'assignmentAssignee',
+        'assignmentAssignee.userId = :userId',
+        { userId },
+      )
+      .where('assignment.organizationId = :organizationId', { organizationId })
+      .orderBy(
+        sort ? `assignment.${sort.key}` : 'assignment.dueDate',
+        sort?.direction ?? 'ASC',
+      )
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return {
+      data: assignments.map((assignment) => this.toMyResponse(assignment)),
+      meta: buildPaginationMeta(page, pageSize, total),
+    };
   }
 
   async findOne(
@@ -281,6 +307,15 @@ export class AssignmentsService {
     if (!result.affected) {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
+  }
+
+  toMyResponse(assignment: Assignment): MyAssignmentResponseDto {
+    return {
+      id: assignment.id,
+      name: assignment.task.name,
+      description: assignment.task.description,
+      dueDate: assignment.dueDate,
+    };
   }
 
   async toResponse(assignment: Assignment): Promise<AssignmentResponseDto> {

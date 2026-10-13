@@ -224,6 +224,93 @@ describe('LaunchDesk API (e2e)', () => {
       .send({ firstName: 'Member', lastName: 'Updated' })
       .expect(200);
 
+    const memberId = meResponse.body.id as string;
+    const adminMeResponse = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const adminId = adminMeResponse.body.id as string;
+
+    const sharedTask = await request(app.getHttpServer())
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Personal checklist',
+        description: 'Finish the checklist before the deadline',
+        steps: [
+          {
+            name: 'Step 1',
+            description: '<p>Step body</p>',
+            attachmentIds: [],
+          },
+        ],
+      })
+      .expect(201);
+
+    const sharedAssignment = await request(app.getHttpServer())
+      .post('/api/assignments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        taskId: sharedTask.body.id,
+        assigneeIds: [memberId, adminId],
+        dueDate: '2026-11-15',
+      })
+      .expect(201);
+
+    const managerTask = await request(app.getHttpServer())
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Quarterly briefing',
+        description: 'Visible only to the manager',
+        steps: [
+          {
+            name: 'Step 1',
+            description: '<p>Step body</p>',
+            attachmentIds: [],
+          },
+        ],
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/api/assignments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        taskId: managerTask.body.id,
+        assigneeIds: [adminId],
+        dueDate: '2026-01-01',
+      })
+      .expect(201);
+
+    const mineResponse = await request(app.getHttpServer())
+      .get('/api/assignments/me')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(200);
+
+    expect(mineResponse.body.data).toEqual([
+      {
+        id: sharedAssignment.body.id,
+        name: 'Personal checklist',
+        description: 'Finish the checklist before the deadline',
+        dueDate: '2026-11-15',
+      },
+    ]);
+    expect(mineResponse.body.meta).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+    });
+
+    const minePayload = JSON.stringify(mineResponse.body);
+    expect(minePayload).not.toContain(adminId);
+    expect(minePayload).not.toContain(memberId);
+    expect(minePayload).not.toContain(adminEmail);
+    expect(minePayload).not.toContain('Member');
+    expect(minePayload).not.toContain('E2E');
+    expect(minePayload).not.toContain('Quarterly briefing');
+
     for (const path of [
       '/api/users',
       '/api/documents',
