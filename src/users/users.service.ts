@@ -13,6 +13,7 @@ import {
 } from '../common/dto/pagination.dto.js';
 import { generateToken, hashToken } from '../common/utils/crypto.js';
 import { MailService } from '../mail/mail.service.js';
+import { Organization } from '../organizations/entities/organization.entity.js';
 import { StorageService } from '../storage/storage.service.js';
 import {
   ChangePasswordDto,
@@ -42,6 +43,8 @@ export class UsersService {
     private readonly inviteTokensRepository: Repository<InviteToken>,
     @InjectRepository(AssignmentAssignee)
     private readonly assignmentAssigneesRepository: Repository<AssignmentAssignee>,
+    @InjectRepository(Organization)
+    private readonly organizationsRepository: Repository<Organization>,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
   ) {}
@@ -110,7 +113,7 @@ export class UsersService {
       }),
     );
 
-    await this.createInviteToken(user);
+    await this.createInviteToken(user, actor);
 
     return this.toResponse(user);
   }
@@ -188,7 +191,7 @@ export class UsersService {
       throw new AppException('alreadyActive', HttpStatus.BAD_REQUEST);
     }
 
-    await this.createInviteToken(user);
+    await this.createInviteToken(user, actor);
   }
 
   async updateProfile(
@@ -309,7 +312,15 @@ export class UsersService {
     }
   }
 
-  private async createInviteToken(user: User): Promise<void> {
+  private async createInviteToken(user: User, actor: User): Promise<void> {
+    const organization = await this.organizationsRepository.findOne({
+      where: { id: user.organizationId },
+    });
+
+    if (!organization) {
+      throw new AppException('notFound', HttpStatus.NOT_FOUND);
+    }
+
     const token = generateToken();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -321,6 +332,10 @@ export class UsersService {
       }),
     );
 
-    await this.mailService.sendInviteEmail(user.email, token);
+    await this.mailService.sendInviteEmail(user.email, token, {
+      firstName: user.firstName,
+      inviterName: `${actor.firstName} ${actor.lastName}`.trim(),
+      organizationName: organization.name,
+    });
   }
 }

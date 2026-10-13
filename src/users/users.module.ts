@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssignmentAssignee } from '../assignments/entities/assignment-assignee.entity.js';
 import { InviteToken } from '../auth/entities/invite-token.entity.js';
 import { MailModule } from '../mail/mail.module.js';
+import { Organization } from '../organizations/entities/organization.entity.js';
 import { StorageModule } from '../storage/storage.module.js';
 import { User } from './entities/user.entity.js';
 import { UsersController } from './users.controller.js';
@@ -11,7 +12,12 @@ import { UsersService } from './users.service.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, InviteToken, AssignmentAssignee]),
+    TypeOrmModule.forFeature([
+      User,
+      InviteToken,
+      AssignmentAssignee,
+      Organization,
+    ]),
     MailModule,
     StorageModule,
   ],
