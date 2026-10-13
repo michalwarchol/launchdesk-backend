@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -29,6 +29,8 @@ import { RefreshToken } from './entities/refresh-token.entity.js';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -75,6 +77,18 @@ export class AuthService {
         organizationId: organization.id,
       }),
     );
+
+    try {
+      await this.mailService.sendWelcomeEmail(user.email, {
+        firstName: user.firstName,
+        organizationName: organization.name,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send welcome email to user ${user.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
 
     return this.issueTokens(user);
   }
@@ -158,7 +172,9 @@ export class AuthService {
       }),
     );
 
-    await this.mailService.sendPasswordResetEmail(user.email, token);
+    await this.mailService.sendPasswordResetEmail(user.email, token, {
+      firstName: user.firstName,
+    });
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
