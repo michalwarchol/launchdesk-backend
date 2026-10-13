@@ -15,7 +15,11 @@ import { IsIn, IsOptional, IsUUID } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
-import { MANAGER_ROLES, User } from '../users/entities/user.entity.js';
+import {
+  MANAGER_ROLES,
+  User,
+  UserRole,
+} from '../users/entities/user.entity.js';
 import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
@@ -49,6 +53,7 @@ export class AssignmentsController {
   }
 
   @Get('me')
+  @Roles(...MANAGER_ROLES, UserRole.User)
   findMine(@CurrentUser() user: User, @Query() query: PaginationQueryDto) {
     return this.assignmentsService.findMine(
       user.id,

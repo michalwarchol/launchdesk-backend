@@ -47,16 +47,18 @@ After running `npm run seed`:
 
 ## API overview
 
-| Resource | Endpoints |
-|---|---|
-| Auth | `POST /auth/register`, `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `/invite/accept`, `/oauth/exchange` |
-| Users | `GET /users`, `POST /users` (admin), `PATCH /users/me`, `POST /users/me/change-password` |
-| Tasks | `GET /tasks`, `POST /tasks` (admin), nested step management |
-| Assignments | `GET /assignments`, `GET /assignments/me`, `POST /assignments` (admin) |
-| Documents | `POST /documents` (multipart), `GET /documents/:id/download` (presigned URL) |
-| Dashboard | `GET /dashboard/stats` |
+| Resource    | Endpoints                                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Auth        | `POST /auth/register`, `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `/invite/accept`, `/oauth/exchange` |
+| Users       | `GET /users`, `POST /users` (admin), `PATCH /users/me`, `POST /users/me/change-password`                                           |
+| Tasks       | `GET /tasks`, `POST /tasks` (admin), nested step management                                                                        |
+| Assignments | `GET /assignments` (admin), `GET /assignments/me` (any role), `POST /assignments` (admin)                                          |
+| Documents   | `POST /documents` (multipart), `GET /documents/:id/download` (presigned URL)                                                       |
+| Dashboard   | `GET /dashboard/stats`                                                                                                             |
 
 All list endpoints support `?page=1&pageSize=10&sort=key:asc` pagination.
+
+`GET /assignments/me` lists assignments assigned to the signed-in user. Each item is `{ id, name, description, dueDate }` from the linked task and the assignment due date. It does not include other assignees. The default sort is `dueDate:asc`.
 
 ## OAuth handoff
 
@@ -64,15 +66,15 @@ OAuth callbacks redirect to `{FRONTEND_URL}/login?code=...`. The frontend must e
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `npm run start:dev` | Start with hot reload |
-| `npm run build` | Compile TypeScript |
+| Command                 | Description              |
+| ----------------------- | ------------------------ |
+| `npm run start:dev`     | Start with hot reload    |
+| `npm run build`         | Compile TypeScript       |
 | `npm run migration:run` | Apply pending migrations |
-| `npm run seed` | Populate demo data |
-| `npm run lint` | Run oxlint |
-| `npm test` | Unit tests |
-| `npm run test:e2e` | End-to-end tests |
+| `npm run seed`          | Populate demo data       |
+| `npm run lint`          | Run oxlint               |
+| `npm test`              | Unit tests               |
+| `npm run test:e2e`      | End-to-end tests         |
 
 ## Environment variables
 
