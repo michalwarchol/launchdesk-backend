@@ -11,6 +11,7 @@ import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { OrganizationsModule } from './organizations/organizations.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -24,6 +25,7 @@ import { UsersModule } from './users/users.module.js';
     OrganizationsModule,
     TasksModule,
     AssignmentsModule,
+    ReportsModule,
     DashboardModule,
   ],
   providers: [

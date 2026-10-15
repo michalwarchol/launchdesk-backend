@@ -5,6 +5,10 @@ import nodemailer from 'nodemailer';
 import { renderInviteEmail } from './templates/invite.js';
 import type { EmailMessage } from './templates/layout.js';
 import { renderPasswordResetEmail } from './templates/password-reset.js';
+import {
+  renderReportEmail,
+  type ReportEmailContext,
+} from './templates/report.js';
 import { renderWelcomeEmail } from './templates/welcome.js';
 
 export interface InviteEmailDetails {
@@ -86,14 +90,31 @@ export class MailService {
     );
   }
 
+  async sendReportEmail(details: ReportEmailContext): Promise<void> {
+    const to = this.config.get<string>('REPORT_EMAIL');
+
+    if (!to) {
+      throw new Error('REPORT_EMAIL is not configured');
+    }
+
+    await this.send(to, renderReportEmail(details), {
+      replyTo: details.reporterEmail,
+    });
+  }
+
   private frontendUrl(): string {
     return this.config.get<string>('FRONTEND_URL') ?? '';
   }
 
-  private async send(email: string, message: EmailMessage): Promise<void> {
+  private async send(
+    email: string,
+    message: EmailMessage,
+    options?: { replyTo?: string },
+  ): Promise<void> {
     await this.transporter.sendMail({
       from: this.config.get<string>('MAIL_FROM'),
       to: email,
+      replyTo: options?.replyTo,
       subject: message.subject,
       text: message.text,
       html: message.html,

@@ -1,6 +1,7 @@
 import { plainToInstance, Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsEmail,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -79,6 +80,9 @@ class EnvironmentVariables {
   @IsNotEmpty()
   MAIL_FROM!: string;
 
+  @IsEmail({ require_tld: false })
+  REPORT_EMAIL!: string;
+
   @IsString()
   @IsOptional()
   GOOGLE_CLIENT_ID?: string;
@@ -120,7 +124,9 @@ class EnvironmentVariables {
   AWS_SECRET_ACCESS_KEY!: string;
 }
 
-export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
+export function validateEnv(
+  config: Record<string, unknown>,
+): EnvironmentVariables {
   const transformed = plainToInstance(EnvironmentVariables, config, {
     enableImplicitConversion: true,
   });

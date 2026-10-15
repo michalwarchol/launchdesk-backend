@@ -55,6 +55,7 @@ After running `npm run seed`:
 | Assignments | `GET /assignments` (admin), `GET /assignments/me` (any role), `POST /assignments` (admin)                                          |
 | Documents   | `POST /documents` (multipart), `GET /documents/:id/download` (presigned URL)                                                       |
 | Dashboard   | `GET /dashboard/stats`                                                                                                             |
+| Reports     | `POST /reports` (any signed-in user)                                                                                               |
 
 All list endpoints support `?page=1&pageSize=10&sort=key:asc` pagination.
 
@@ -83,7 +84,7 @@ See [`.env.example`](.env.example) for the full list. Required in all environmen
 - `DATABASE_*` — Postgres connection
 - `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`
 - `FRONTEND_URL`
-- `SMTP_*` / `MAIL_FROM`
+- `SMTP_*` / `MAIL_FROM` / `REPORT_EMAIL`
 - `AWS_REGION` / `AWS_S3_BUCKET` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
 
 OAuth (`GOOGLE_*`, `GITHUB_*`) is optional — leave blank to disable provider routes.
