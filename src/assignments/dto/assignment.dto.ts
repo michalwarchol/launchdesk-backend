@@ -1,4 +1,4 @@
-import { IsArray, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateAssignmentDto {
   @IsUUID()
@@ -21,10 +21,13 @@ export class UpdateAssignmentDto {
   @IsOptional()
   @IsString()
   dueDate?: string;
+}
+
+export class SetStepCompletionDto {
+  @IsBoolean()
+  completed!: boolean;
 
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(1)
-  progress?: number;
+  @IsString()
+  notes?: string;
 }

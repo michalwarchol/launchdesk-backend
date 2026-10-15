@@ -1,4 +1,6 @@
 import { AssignmentAssignee } from '../assignments/entities/assignment-assignee.entity.js';
+import { AssignmentStepCompletion } from '../assignments/entities/assignment-step-completion.entity.js';
+import { AssignmentStepNote } from '../assignments/entities/assignment-step-note.entity.js';
 import { Assignment } from '../assignments/entities/assignment.entity.js';
 import { OAuthExchangeCode } from '../auth/entities/oauth-exchange-code.entity.js';
 import { InviteToken } from '../auth/entities/invite-token.entity.js';
@@ -26,4 +28,6 @@ export const entities = [
   Document,
   Assignment,
   AssignmentAssignee,
+  AssignmentStepCompletion,
+  AssignmentStepNote,
 ];

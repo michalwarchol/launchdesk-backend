@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AssignmentsService } from '../assignments/assignments.service.js';
 import { Assignment } from '../assignments/entities/assignment.entity.js';
 import { deriveAssignmentStatus } from '../assignments/utils/assignment-status.js';
 import { StorageService } from '../storage/storage.service.js';
@@ -23,6 +24,7 @@ export class DashboardService {
     private readonly taskStepsRepository: Repository<TaskStep>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly assignmentsService: AssignmentsService,
     private readonly storageService: StorageService,
   ) {}
 
@@ -46,9 +48,10 @@ export class DashboardService {
         .getCount(),
     ]);
 
+    const derived = await this.assignmentsService.progressByAssignment(assignments);
     const statuses = assignments.map((assignment) =>
       deriveAssignmentStatus(
-        Number(assignment.progress),
+        derived.get(assignment.id)?.progress ?? 0,
         assignment.dueDate,
         now,
       ),
@@ -92,9 +95,9 @@ export class DashboardService {
             })),
           ),
           dueDate: assignment.dueDate,
-          progress: Number(assignment.progress),
+          progress: derived.get(assignment.id)?.progress ?? 0,
           status: deriveAssignmentStatus(
-            Number(assignment.progress),
+            derived.get(assignment.id)?.progress ?? 0,
             assignment.dueDate,
             now,
           ),

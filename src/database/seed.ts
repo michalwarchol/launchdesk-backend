@@ -4,9 +4,11 @@ import * as bcrypt from 'bcrypt';
 import { config } from 'dotenv';
 
 import { AssignmentAssignee } from '../assignments/entities/assignment-assignee.entity.js';
+import { AssignmentStepCompletion } from '../assignments/entities/assignment-step-completion.entity.js';
 import { Assignment } from '../assignments/entities/assignment.entity.js';
 import { Document, DocumentType } from '../documents/entities/document.entity.js';
 import { Organization } from '../organizations/entities/organization.entity.js';
+import { TaskStep } from '../tasks/entities/task-step.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity.js';
 import { AppDataSource } from './data-source.js';
@@ -28,6 +30,9 @@ async function seed(): Promise<void> {
   const documentRepo = AppDataSource.getRepository(Document);
   const assignmentRepo = AppDataSource.getRepository(Assignment);
   const assignmentAssigneeRepo = AppDataSource.getRepository(AssignmentAssignee);
+  const taskStepRepo = AppDataSource.getRepository(TaskStep);
+  const completionRepo = AppDataSource.getRepository(AssignmentStepCompletion);
+  const stepsPerTask = 20;
 
   const existing = await userRepo.count();
   if (existing > 0) {
@@ -84,6 +89,23 @@ async function seed(): Promise<void> {
     { name: 'Mentorship pairing', description: 'Match mentors with new hires.', createdById: users[10].id },
   ].map((task) => taskRepo.create({ ...task, organizationId: organization.id })));
 
+  const stepsByTask = new Map<string, TaskStep[]>();
+
+  for (const task of tasks) {
+    const steps = await taskStepRepo.save(
+      Array.from({ length: stepsPerTask }, (_, index) =>
+        taskStepRepo.create({
+          taskId: task.id,
+          name: `Step ${index + 1}`,
+          description: `<p>Part ${index + 1} of ${task.name}.</p>`,
+          position: index,
+          notesRequired: false,
+        }),
+      ),
+    );
+    stepsByTask.set(task.id, steps);
+  }
+
   await documentRepo.save([
     { name: 'quarterly-report.pdf', type: DocumentType.Text, extension: 'pdf', size: '2400000', mimeType: 'application/pdf', s3Key: 'seed/quarterly-report.pdf', uploadedById: users[0].id },
     { name: 'onboarding-checklist.docx', type: DocumentType.Text, extension: 'docx', size: '180000', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', s3Key: 'seed/onboarding-checklist.docx', uploadedById: users[1].id },
@@ -123,7 +145,6 @@ async function seed(): Promise<void> {
       assignmentRepo.create({
         taskId: tasks[row.taskIndex].id,
         organizationId: organization.id,
-        progress: row.progress,
         dueDate: addDaysISO(today, row.dueOffset),
         completedAt:
           row.completedOffset !== undefined ? addDaysISO(today, row.completedOffset) : null,
@@ -140,6 +161,22 @@ async function seed(): Promise<void> {
         }),
       ),
     );
+
+    const completedCount = Math.round(Number(row.progress) * stepsPerTask);
+    const steps = stepsByTask.get(assignment.taskId) ?? [];
+    const completions = row.assigneeIndexes.flatMap((index) =>
+      steps.slice(0, completedCount).map((step) =>
+        completionRepo.create({
+          assignmentId: assignment.id,
+          userId: users[index].id,
+          taskStepId: step.id,
+        }),
+      ),
+    );
+
+    if (completions.length > 0) {
+      await completionRepo.save(completions);
+    }
   }
 
   console.info('Seed completed successfully.');

@@ -17,6 +17,9 @@ export class TaskStepResponseDto {
   position!: number;
 
   @Expose()
+  notesRequired!: boolean;
+
+  @Expose()
   @Type(() => DocumentResponseDto)
   attachments!: DocumentResponseDto[];
 }
