@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Redirect,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsUUID } from 'class-validator';
@@ -22,6 +23,7 @@ import {
 } from '../users/entities/user.entity.js';
 import {
   CreateAssignmentDto,
+  SetStepCompletionDto,
   UpdateAssignmentDto,
 } from './dto/assignment.dto.js';
 import { AssignmentsService } from './assignments.service.js';
@@ -60,6 +62,48 @@ export class AssignmentsController {
       query,
       user.organizationId,
     );
+  }
+
+  @Get('me/:id')
+  @Roles(...MANAGER_ROLES, UserRole.User)
+  findMyTask(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.assignmentsService.findMyTask(id, user);
+  }
+
+  @Patch('me/:id/steps/:stepId')
+  @Roles(...MANAGER_ROLES, UserRole.User)
+  setStepCompletion(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('stepId') stepId: string,
+    @Body() dto: SetStepCompletionDto,
+  ) {
+    return this.assignmentsService.setStepCompletion(
+      id,
+      stepId,
+      dto.completed,
+      dto.notes,
+      user,
+    );
+  }
+
+  @Get('me/:id/steps/:stepId/attachments/:documentId/download')
+  @Roles(...MANAGER_ROLES, UserRole.User)
+  @Redirect()
+  async downloadStepAttachment(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('stepId') stepId: string,
+    @Param('documentId') documentId: string,
+  ) {
+    const url = await this.assignmentsService.getStepAttachmentDownloadUrl(
+      id,
+      stepId,
+      documentId,
+      user,
+    );
+
+    return { url, statusCode: 302 };
   }
 
   @Get(':id')

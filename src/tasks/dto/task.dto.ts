@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -21,6 +22,10 @@ export class CreateTaskStepDto {
   @IsArray()
   @IsUUID('4', { each: true })
   attachmentIds: string[] = [];
+
+  @IsOptional()
+  @IsBoolean()
+  notesRequired?: boolean;
 }
 
 export class CreateTaskDto {
@@ -67,6 +72,10 @@ export class UpdateTaskStepDto {
   @IsArray()
   @IsUUID('4', { each: true })
   attachmentIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  notesRequired?: boolean;
 }
 
 export class ReorderStepsDto {

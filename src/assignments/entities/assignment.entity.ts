@@ -34,9 +34,6 @@ export class Assignment {
   @JoinColumn({ name: 'taskId' })
   task!: Relation<Task>;
 
-  @Column({ type: 'numeric', precision: 3, scale: 2, default: 0 })
-  progress!: string;
-
   @Column({ type: 'date' })
   dueDate!: string;
 

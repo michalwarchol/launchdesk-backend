@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
+import { AssignmentsService } from '../assignments/assignments.service.js';
 import { AppException } from '../common/exceptions/app.exception.js';
 import {
   buildPaginationMeta,
@@ -41,6 +42,7 @@ export class TasksService {
     @InjectRepository(Document)
     private readonly documentsRepository: Repository<Document>,
     private readonly documentsService: DocumentsService,
+    private readonly assignmentsService: AssignmentsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -141,7 +143,7 @@ export class TasksService {
       throw new AppException('notFound', HttpStatus.NOT_FOUND);
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const detail = await this.dataSource.transaction(async (manager) => {
       task.name = dto.name.trim();
       task.description = dto.description.trim();
       await manager.save(task);
@@ -170,6 +172,10 @@ export class TasksService {
 
       return this.toDetail(updated!);
     });
+
+    await this.assignmentsService.refreshCompletedAtForTask(id);
+
+    return detail;
   }
 
   async remove(id: string, organizationId: string): Promise<void> {
@@ -198,6 +204,7 @@ export class TasksService {
         name: dto.name.trim(),
         description: dto.description,
         position,
+        notesRequired: dto.notesRequired ?? false,
       }),
     );
 
@@ -212,6 +219,8 @@ export class TasksService {
       relations: { attachments: { document: true } },
       order: { attachments: { position: 'ASC' } },
     });
+
+    await this.assignmentsService.refreshCompletedAtForTask(taskId);
 
     return this.toStepResponse(saved!);
   }
@@ -233,6 +242,7 @@ export class TasksService {
 
     if (dto.name !== undefined) step.name = dto.name.trim();
     if (dto.description !== undefined) step.description = dto.description;
+    if (dto.notesRequired !== undefined) step.notesRequired = dto.notesRequired;
 
     await this.taskStepsRepository.save(step);
 
@@ -268,6 +278,7 @@ export class TasksService {
     }
 
     await this.taskStepsRepository.remove(step);
+    await this.assignmentsService.refreshCompletedAtForTask(taskId);
   }
 
   async reorderSteps(
@@ -323,6 +334,7 @@ export class TasksService {
           name: stepDto.name.trim(),
           description: stepDto.description,
           position: index,
+          notesRequired: stepDto.notesRequired ?? false,
         }),
       );
 
@@ -424,6 +436,7 @@ export class TasksService {
       name: step.name,
       description: step.description,
       position: step.position,
+      notesRequired: step.notesRequired,
       attachments: (step.attachments ?? []).map((attachment) =>
         this.documentsService.toResponse(attachment.document),
       ),

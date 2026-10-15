@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { DocumentsModule } from '../documents/documents.module.js';
 import { Document } from '../documents/entities/document.entity.js';
+import { AssignmentsModule } from '../assignments/assignments.module.js';
 import { TaskStepAttachment } from './entities/task-step-attachment.entity.js';
 import { TaskStep } from './entities/task-step.entity.js';
 import { Task } from './entities/task.entity.js';
@@ -13,6 +14,7 @@ import { TasksService } from './tasks.service.js';
   imports: [
     TypeOrmModule.forFeature([Task, TaskStep, TaskStepAttachment, Document]),
     DocumentsModule,
+    AssignmentsModule,
   ],
   controllers: [TasksController],
   providers: [TasksService],

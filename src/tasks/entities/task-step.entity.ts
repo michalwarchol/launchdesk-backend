@@ -34,6 +34,9 @@ export class TaskStep {
   @Column({ type: 'int' })
   position!: number;
 
+  @Column({ type: 'boolean', default: false })
+  notesRequired!: boolean;
+
   @OneToMany(() => TaskStepAttachment, (attachment) => attachment.taskStep)
   attachments!: Relation<TaskStepAttachment[]>;
 

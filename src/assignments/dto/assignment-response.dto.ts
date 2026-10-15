@@ -14,6 +14,10 @@ export class AssignmentAssigneeDto {
 
   @Expose()
   avatar?: string;
+
+  /** This assignee's completed-step ratio. */
+  @Expose()
+  progress!: number;
 }
 
 export class AssignmentResponseDto {

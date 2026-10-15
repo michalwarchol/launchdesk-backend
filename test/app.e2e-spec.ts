@@ -330,6 +330,259 @@ describe('LaunchDesk API (e2e)', () => {
       .expect(403);
   });
 
+  it('derives assignment progress from each assignee without exposing other people', async () => {
+    const mail = app.get(MailService);
+    let inviteToken = '';
+    const spy = vi
+      .spyOn(mail, 'sendInviteEmail')
+      .mockImplementation(async (_email, token) => {
+        inviteToken = token;
+      });
+
+    const email = `e2e-player-${Date.now()}@example.com`;
+
+    await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        firstName: 'Player',
+        lastName: 'Member',
+        email,
+        role: 'user',
+      })
+      .expect(201);
+
+    spy.mockRestore();
+
+    const acceptResponse = await request(app.getHttpServer())
+      .post('/api/auth/invite/accept')
+      .send({ token: inviteToken, password: 'password123' })
+      .expect(201);
+
+    const playerToken = acceptResponse.body.accessToken as string;
+    const playerId = acceptResponse.body.user.id as string;
+    const adminMe = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const adminId = adminMe.body.id as string;
+
+    const taskResponse = await request(app.getHttpServer())
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Player checklist',
+        description: 'Two short steps',
+        steps: [
+          {
+            name: 'Read the guide',
+            description: '<p>Read it</p>',
+            attachmentIds: [],
+          },
+          {
+            name: 'Confirm',
+            description: '<p>Confirm it</p>',
+            attachmentIds: [],
+          },
+        ],
+      })
+      .expect(201);
+
+    const [firstStep, secondStep] = taskResponse.body.steps as { id: string }[];
+
+    const assignmentResponse = await request(app.getHttpServer())
+      .post('/api/assignments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        taskId: taskResponse.body.id,
+        assigneeIds: [playerId, adminId],
+        dueDate: '2026-12-01',
+      })
+      .expect(201);
+
+    const assignmentId = assignmentResponse.body.id as string;
+    expect(assignmentResponse.body.progress).toBe(0);
+
+    const detailResponse = await request(app.getHttpServer())
+      .get(`/api/assignments/me/${assignmentId}`)
+      .set('Authorization', `Bearer ${playerToken}`)
+      .expect(200);
+
+    expect(detailResponse.body).toMatchObject({
+      id: assignmentId,
+      name: 'Player checklist',
+      description: 'Two short steps',
+      dueDate: '2026-12-01',
+      progress: 0,
+    });
+    expect(detailResponse.body.steps).toEqual([
+      {
+        id: firstStep.id,
+        name: 'Read the guide',
+        description: '<p>Read it</p>',
+        completed: false,
+        notesRequired: false,
+        notes: '',
+        attachments: [],
+      },
+      {
+        id: secondStep.id,
+        name: 'Confirm',
+        description: '<p>Confirm it</p>',
+        completed: false,
+        notesRequired: false,
+        notes: '',
+        attachments: [],
+      },
+    ]);
+
+    const detailPayload = JSON.stringify(detailResponse.body);
+    expect(detailPayload).not.toContain(adminId);
+    expect(detailPayload).not.toContain(adminEmail);
+    expect(detailPayload).not.toContain('E2E');
+
+    const started = await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${assignmentId}/steps/${firstStep.id}`)
+      .set('Authorization', `Bearer ${playerToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    expect(started.body.progress).toBe(0.5);
+    expect(started.body.steps[0].completed).toBe(true);
+
+    const managerView = await request(app.getHttpServer())
+      .get(`/api/assignments/${assignmentId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(managerView.body.progress).toBe(0.25);
+    expect(
+      managerView.body.assignees.find(
+        (assignee: { id: string }) => assignee.id === playerId,
+      ).progress,
+    ).toBe(0.5);
+
+    await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${assignmentId}/steps/${secondStep.id}`)
+      .set('Authorization', `Bearer ${playerToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${assignmentId}/steps/${firstStep.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    const finishedByAdmin = await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${assignmentId}/steps/${secondStep.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    expect(finishedByAdmin.body.progress).toBe(1);
+
+    const completedAssignment = await request(app.getHttpServer())
+      .get(`/api/assignments/${assignmentId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(completedAssignment.body.progress).toBe(1);
+    expect(completedAssignment.body.completedAt).toBe(
+      new Date().toISOString().slice(0, 10),
+    );
+
+    await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${assignmentId}/steps/${secondStep.id}`)
+      .set('Authorization', `Bearer ${playerToken}`)
+      .send({ completed: false })
+      .expect(200);
+
+    const reopened = await request(app.getHttpServer())
+      .get(`/api/assignments/${assignmentId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(reopened.body.progress).toBe(0.75);
+    expect(reopened.body.completedAt).toBeNull();
+
+    await request(app.getHttpServer())
+      .get(
+        `/api/assignments/me/${assignmentId}/steps/${firstStep.id}/attachments/00000000-0000-4000-8000-000000000000/download`,
+      )
+      .set('Authorization', `Bearer ${playerToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .get('/api/assignments')
+      .set('Authorization', `Bearer ${playerToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .get(`/api/assignments/me/${assignmentId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const notesTask = await request(app.getHttpServer())
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Notes checklist',
+        description: 'Notes are required on the first step',
+        steps: [
+          {
+            name: 'Leave a note',
+            description: '<p>Write something</p>',
+            attachmentIds: [],
+            notesRequired: true,
+          },
+        ],
+      })
+      .expect(201);
+
+    const notesStepId = notesTask.body.steps[0].id as string;
+    expect(notesTask.body.steps[0].notesRequired).toBe(true);
+
+    const notesAssignment = await request(app.getHttpServer())
+      .post('/api/assignments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        taskId: notesTask.body.id,
+        assigneeIds: [playerId, adminId],
+        dueDate: '2026-12-02',
+      })
+      .expect(201);
+
+    const notesAssignmentId = notesAssignment.body.id as string;
+
+    const missingNotes = await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${notesAssignmentId}/steps/${notesStepId}`)
+      .set('Authorization', `Bearer ${playerToken}`)
+      .send({ completed: true, notes: '<p></p>' })
+      .expect(400);
+
+    expect(missingNotes.body.code).toBe('notesRequired');
+
+    const savedNotes = await request(app.getHttpServer())
+      .patch(`/api/assignments/me/${notesAssignmentId}/steps/${notesStepId}`)
+      .set('Authorization', `Bearer ${playerToken}`)
+      .send({ completed: true, notes: '<p>This step was clear.</p>' })
+      .expect(200);
+
+    expect(savedNotes.body.steps[0]).toMatchObject({
+      completed: true,
+      notesRequired: true,
+      notes: '<p>This step was clear.</p>',
+    });
+
+    const adminNotes = await request(app.getHttpServer())
+      .get(`/api/assignments/me/${notesAssignmentId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(JSON.stringify(adminNotes.body)).not.toContain('This step was clear');
+  });
+
   it('hides resources that belong to another organization', async () => {
     const otherEmail = `e2e-other-${Date.now()}@example.com`;
     const otherResponse = await request(app.getHttpServer())
