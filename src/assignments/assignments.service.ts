@@ -138,10 +138,7 @@ export class AssignmentsService {
     query: PaginationQueryDto,
     organizationId: string,
   ): Promise<PaginatedResponse<MyAssignmentResponseDto>> {
-    const sort = parseSort(query.sort, ASSIGNMENT_SORT_KEYS);
-    const sortByProgress = sort?.key === 'progress';
-
-    const qb = this.assignmentsRepository
+    const assignments = await this.assignmentsRepository
       .createQueryBuilder('assignment')
       .innerJoinAndSelect('assignment.task', 'task')
       .innerJoin(
@@ -150,48 +147,40 @@ export class AssignmentsService {
         'assignmentAssignee.userId = :userId',
         { userId },
       )
-      .where('assignment.organizationId = :organizationId', { organizationId });
-
-    if (!sortByProgress) {
-      qb.orderBy(
-        sort ? `assignment.${sort.key}` : 'assignment.dueDate',
-        sort?.direction ?? 'ASC',
-      );
-    }
-
-    if (!sortByProgress) {
-      const page = query.page;
-      const pageSize = query.pageSize;
-      const [assignments, total] = await qb
-        .skip((page - 1) * pageSize)
-        .take(pageSize)
-        .getManyAndCount();
-
-      return {
-        data: assignments.map((assignment) => this.toMyResponse(assignment)),
-        meta: buildPaginationMeta(page, pageSize, total),
-      };
-    }
-
-    const assignments = await qb.getMany();
+      .where('assignment.organizationId = :organizationId', { organizationId })
+      .getMany();
     const derived = await this.progressByAssignment(assignments);
-    const direction = sort?.direction === 'DESC' ? -1 : 1;
-    assignments.sort(
-      (left, right) =>
-        ((derived.get(left.id)?.byAssignee.get(userId) ?? 0) -
-          (derived.get(right.id)?.byAssignee.get(userId) ?? 0)) *
-        direction,
-    );
+    const rank = { overdue: 0, inProgress: 1, notStarted: 2 } as const;
+
+    const active = assignments
+      .map((assignment) => ({
+        assignment,
+        status: deriveAssignmentStatus(
+          derived.get(assignment.id)?.byAssignee.get(userId) ?? 0,
+          assignment.dueDate,
+        ),
+      }))
+      .filter(
+        (item): item is typeof item & { status: keyof typeof rank } =>
+          item.status !== 'completed',
+      )
+      .sort(
+        (left, right) =>
+          rank[left.status] - rank[right.status] ||
+          left.assignment.dueDate.localeCompare(right.assignment.dueDate) ||
+          left.assignment.createdAt.getTime() -
+            right.assignment.createdAt.getTime(),
+      );
 
     const page = query.page;
     const pageSize = query.pageSize;
     const start = (page - 1) * pageSize;
 
     return {
-      data: assignments
+      data: active
         .slice(start, start + pageSize)
-        .map((assignment) => this.toMyResponse(assignment)),
-      meta: buildPaginationMeta(page, pageSize, assignments.length),
+        .map(({ assignment, status }) => this.toMyResponse(assignment, status)),
+      meta: buildPaginationMeta(page, pageSize, active.length),
     };
   }
 
@@ -367,8 +356,12 @@ export class AssignmentsService {
     await this.refreshCompletedAt(assignmentId);
   }
 
-  toMyResponse(assignment: Assignment): MyAssignmentResponseDto {
+  toMyResponse(
+    assignment: Assignment,
+    status: MyAssignmentResponseDto['status'],
+  ): MyAssignmentResponseDto {
     return {
+      status,
       id: assignment.id,
       name: assignment.task.name,
       description: assignment.task.description,

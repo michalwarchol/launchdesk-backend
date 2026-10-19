@@ -15,4 +15,7 @@ export class MyAssignmentResponseDto {
   @Expose()
   @IsoDate()
   dueDate!: string;
+
+  @Expose()
+  status!: 'overdue' | 'inProgress' | 'notStarted';
 }
