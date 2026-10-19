@@ -79,9 +79,12 @@ export class AssignmentsService {
     }
 
     if (query.assigneeId) {
-      qb.andWhere('assignmentAssignee.userId = :assigneeId', {
-        assigneeId: query.assigneeId,
-      });
+      qb.innerJoin(
+        'assignment.assignees',
+        'filterAssignee',
+        'filterAssignee.userId = :assigneeId',
+        { assigneeId: query.assigneeId },
+      );
     }
 
     const sortByProgress = sort?.key === 'progress';
@@ -95,13 +98,17 @@ export class AssignmentsService {
 
     const assignments = await qb.getMany();
     const derived = await this.progressByAssignment(assignments);
+    const progressOf = (assignment: Assignment) => {
+      const entry = derived.get(assignment.id);
+      return query.assigneeId
+        ? (entry?.byAssignee.get(query.assigneeId) ?? 0)
+        : (entry?.progress ?? 0);
+    };
     const filtered = query.status
       ? assignments.filter(
           (assignment) =>
-            deriveAssignmentStatus(
-              derived.get(assignment.id)?.progress ?? 0,
-              assignment.dueDate,
-            ) === query.status,
+            deriveAssignmentStatus(progressOf(assignment), assignment.dueDate) ===
+            query.status,
         )
       : [...assignments];
 
@@ -109,9 +116,7 @@ export class AssignmentsService {
       const direction = sort.direction === 'ASC' ? 1 : -1;
       filtered.sort(
         (left, right) =>
-          ((derived.get(left.id)?.progress ?? 0) -
-            (derived.get(right.id)?.progress ?? 0)) *
-          direction,
+          (progressOf(left) - progressOf(right)) * direction,
       );
     }
 
