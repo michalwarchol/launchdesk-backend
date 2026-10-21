@@ -37,6 +37,8 @@ services:
       context: ./backend
     restart: unless-stopped
     env_file: .env
+    environment:
+      NODE_ENV: production
     depends_on:
       postgres:
         condition: service_healthy

@@ -21,7 +21,7 @@ async function bootstrap() {
     }),
   );
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.ENABLE_SWAGGER === 'true') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('LaunchDesk API')
       .setDescription('REST API for the LaunchDesk application')

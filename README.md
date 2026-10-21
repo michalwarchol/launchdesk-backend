@@ -34,7 +34,7 @@ npm run start:dev
 ```
 
 API: `http://localhost:4000/api`  
-Swagger: `http://localhost:4000/api/docs`  
+Swagger: `http://localhost:4000/api/docs` (set `ENABLE_SWAGGER=true` in `.env`)  
 Mailpit UI: `http://localhost:8025`
 pgAdmin: `http://localhost:5050/browser/`
 
