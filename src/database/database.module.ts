@@ -19,6 +19,7 @@ import { migrations } from './migrations/index.js';
         entities,
         migrations,
         migrationsRun: true,
+        migrationsTransactionMode: 'each',
         synchronize: false,
         logging: config.get<string>('NODE_ENV') === 'development',
       }),
