@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install -g npm@11.13.0 && npm ci
 
 COPY . .
 RUN npm run build
@@ -17,7 +17,7 @@ ENV NODE_ENV=production
 RUN apk add --no-cache curl
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm install -g npm@11.13.0 && npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
