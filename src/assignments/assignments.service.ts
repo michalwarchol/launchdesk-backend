@@ -155,9 +155,9 @@ export class AssignmentsService {
       .where('assignment.organizationId = :organizationId', { organizationId })
       .getMany();
     const derived = await this.progressByAssignment(assignments);
-    const rank = { overdue: 0, inProgress: 1, notStarted: 2 } as const;
+    const rank = { overdue: 0, inProgress: 1, notStarted: 2, completed: 3 } as const;
 
-    const active = assignments
+    const sorted = assignments
       .map((assignment) => ({
         assignment,
         status: deriveAssignmentStatus(
@@ -165,10 +165,6 @@ export class AssignmentsService {
           assignment.dueDate,
         ),
       }))
-      .filter(
-        (item): item is typeof item & { status: keyof typeof rank } =>
-          item.status !== 'completed',
-      )
       .sort(
         (left, right) =>
           rank[left.status] - rank[right.status] ||
@@ -182,10 +178,10 @@ export class AssignmentsService {
     const start = (page - 1) * pageSize;
 
     return {
-      data: active
+      data: sorted
         .slice(start, start + pageSize)
         .map(({ assignment, status }) => this.toMyResponse(assignment, status)),
-      meta: buildPaginationMeta(page, pageSize, active.length),
+      meta: buildPaginationMeta(page, pageSize, sorted.length),
     };
   }
 
@@ -196,9 +192,18 @@ export class AssignmentsService {
     const assignment = await this.assignmentsRepository.findOne({
       where: { id, organizationId },
       relations: {
-        task: true,
+        task: {
+          steps: true,
+        },
         assignees: {
           user: true,
+        },
+      },
+      order: {
+        task: {
+          steps: {
+            position: 'ASC',
+          },
         },
       },
     });
@@ -208,8 +213,24 @@ export class AssignmentsService {
     }
 
     const derived = await this.progressByAssignment([assignment]);
+    const steps = [...(assignment.task.steps ?? [])].sort(
+      (left, right) => left.position - right.position,
+    );
+    const notes = await this.notesRepository.find({ where: { assignmentId: id } });
+    const notesByUserAndStep = new Map<string, Map<string, string>>();
 
-    return this.toResponse(assignment, derived.get(assignment.id) ?? emptyProgress());
+    for (const note of notes) {
+      const byStep =
+        notesByUserAndStep.get(note.userId) ?? new Map<string, string>();
+      byStep.set(note.taskStepId, note.notes);
+      notesByUserAndStep.set(note.userId, byStep);
+    }
+
+    return this.toResponse(
+      assignment,
+      derived.get(assignment.id) ?? emptyProgress(),
+      { steps, notesByUserAndStep },
+    );
   }
 
   async create(
@@ -377,6 +398,10 @@ export class AssignmentsService {
   async toResponse(
     assignment: Assignment,
     derived: DerivedAssignmentProgress,
+    detail?: {
+      steps: TaskStep[];
+      notesByUserAndStep: Map<string, Map<string, string>>;
+    },
   ): Promise<AssignmentResponseDto> {
     return {
       id: assignment.id,
@@ -391,6 +416,15 @@ export class AssignmentsService {
             assignee.user.avatarUrl,
           ),
           progress: derived.byAssignee.get(assignee.userId) ?? 0,
+          stepNotes: detail
+            ? detail.steps.map((step) => ({
+                stepId: step.id,
+                stepName: step.name,
+                notes:
+                  detail.notesByUserAndStep.get(assignee.userId)?.get(step.id) ??
+                  '',
+              }))
+            : undefined,
         })),
       ),
       progress: derived.progress,
