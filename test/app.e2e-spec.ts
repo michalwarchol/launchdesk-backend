@@ -294,6 +294,7 @@ describe('LaunchDesk API (e2e)', () => {
         name: 'Personal checklist',
         description: 'Finish the checklist before the deadline',
         dueDate: '2026-11-15',
+        status: 'notStarted',
       },
     ]);
     expect(mineResponse.body.meta).toMatchObject({
@@ -468,6 +469,20 @@ describe('LaunchDesk API (e2e)', () => {
       .send({ completed: true })
       .expect(200);
 
+    const playerCompletedMine = await request(app.getHttpServer())
+      .get('/api/assignments/me')
+      .set('Authorization', `Bearer ${playerToken}`)
+      .expect(200);
+
+    expect(
+      playerCompletedMine.body.data.find(
+        (item: { id: string }) => item.id === assignmentId,
+      ),
+    ).toMatchObject({
+      id: assignmentId,
+      status: 'completed',
+    });
+
     await request(app.getHttpServer())
       .patch(`/api/assignments/me/${assignmentId}/steps/${firstStep.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -581,6 +596,51 @@ describe('LaunchDesk API (e2e)', () => {
       .expect(200);
 
     expect(JSON.stringify(adminNotes.body)).not.toContain('This step was clear');
+
+    const playerMine = await request(app.getHttpServer())
+      .get('/api/assignments/me')
+      .set('Authorization', `Bearer ${playerToken}`)
+      .expect(200);
+
+    const completedEntry = playerMine.body.data.find(
+      (item: { id: string }) => item.id === notesAssignmentId,
+    );
+    expect(completedEntry).toMatchObject({
+      id: notesAssignmentId,
+      status: 'completed',
+    });
+
+    const adminAssignmentDetail = await request(app.getHttpServer())
+      .get(`/api/assignments/${notesAssignmentId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const playerAssignee = adminAssignmentDetail.body.assignees.find(
+      (assignee: { id: string }) => assignee.id === playerId,
+    );
+    const adminAssignee = adminAssignmentDetail.body.assignees.find(
+      (assignee: { id: string }) => assignee.id === adminId,
+    );
+
+    expect(playerAssignee.stepNotes).toEqual([
+      {
+        stepId: notesStepId,
+        stepName: 'Leave a note',
+        notes: '<p>This step was clear.</p>',
+      },
+    ]);
+    expect(adminAssignee.stepNotes).toEqual([
+      {
+        stepId: notesStepId,
+        stepName: 'Leave a note',
+        notes: '',
+      },
+    ]);
+    expect(
+      adminAssignmentDetail.body.assignees.every(
+        (assignee: { stepNotes?: unknown }) => assignee.stepNotes !== undefined,
+      ),
+    ).toBe(true);
   });
 
   it('hides resources that belong to another organization', async () => {

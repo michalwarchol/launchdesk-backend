@@ -2,6 +2,17 @@ import { Expose, Type } from 'class-transformer';
 
 import { IsoDate } from '../../common/decorators/iso-date.decorator.js';
 
+export class AssignmentAssigneeStepNoteDto {
+  @Expose()
+  stepId!: string;
+
+  @Expose()
+  stepName!: string;
+
+  @Expose()
+  notes!: string;
+}
+
 export class AssignmentAssigneeDto {
   @Expose()
   id!: string;
@@ -18,6 +29,10 @@ export class AssignmentAssigneeDto {
   /** This assignee's completed-step ratio. */
   @Expose()
   progress!: number;
+
+  @Expose()
+  @Type(() => AssignmentAssigneeStepNoteDto)
+  stepNotes?: AssignmentAssigneeStepNoteDto[];
 }
 
 export class AssignmentResponseDto {
