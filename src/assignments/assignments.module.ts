@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { MailModule } from '../mail/mail.module.js';
+import { Organization } from '../organizations/entities/organization.entity.js';
 import { StorageModule } from '../storage/storage.module.js';
 import { TaskStep } from '../tasks/entities/task-step.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
@@ -22,8 +24,10 @@ import { Assignment } from './entities/assignment.entity.js';
       Task,
       TaskStep,
       User,
+      Organization,
     ]),
     StorageModule,
+    MailModule,
   ],
   controllers: [AssignmentsController],
   providers: [AssignmentsService],

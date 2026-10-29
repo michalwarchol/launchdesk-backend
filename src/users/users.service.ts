@@ -18,6 +18,7 @@ import { StorageService } from '../storage/storage.service.js';
 import {
   ChangePasswordDto,
   CreateUserDto,
+  UpdateNotificationPreferencesDto,
   UpdateProfileDto,
   UpdateUserDto,
 } from './dto/user.dto.js';
@@ -226,6 +227,18 @@ export class UsersService {
 
     const saved = await this.usersRepository.save(user);
     return this.toResponse(saved);
+  }
+
+  async updateNotificationPreferences(
+    user: User,
+    dto: UpdateNotificationPreferencesDto,
+  ): Promise<{ assignmentNotificationEmails: boolean }> {
+    user.assignmentNotificationEmails = dto.assignmentNotificationEmails;
+    const saved = await this.usersRepository.save(user);
+
+    return {
+      assignmentNotificationEmails: saved.assignmentNotificationEmails,
+    };
   }
 
   async changePassword(user: User, dto: ChangePasswordDto): Promise<void> {

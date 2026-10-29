@@ -10,6 +10,10 @@ import {
   type ReportEmailContext,
 } from './templates/report.js';
 import { renderWelcomeEmail } from './templates/welcome.js';
+import {
+  renderAssignmentAssignedEmail,
+  type AssignmentAssignedEmailContext,
+} from './templates/assignment-assigned.js';
 
 export interface InviteEmailDetails {
   firstName: string;
@@ -25,6 +29,11 @@ export interface WelcomeEmailDetails {
   firstName: string;
   organizationName: string;
 }
+
+export type AssignmentAssignedEmailDetails = Omit<
+  AssignmentAssignedEmailContext,
+  'assignmentUrl'
+> & { assignmentId: string };
 
 @Injectable()
 export class MailService {
@@ -100,6 +109,25 @@ export class MailService {
     await this.send(to, renderReportEmail(details), {
       replyTo: details.reporterEmail,
     });
+  }
+
+  async sendAssignmentAssignedEmail(
+    email: string,
+    details: AssignmentAssignedEmailDetails,
+  ): Promise<void> {
+    const assignmentUrl = `${this.frontendUrl()}/my-tasks/${encodeURIComponent(details.assignmentId)}`;
+
+    await this.send(
+      email,
+      renderAssignmentAssignedEmail({
+        firstName: details.firstName,
+        assignerName: details.assignerName,
+        organizationName: details.organizationName,
+        taskName: details.taskName,
+        dueDate: details.dueDate,
+        assignmentUrl,
+      }),
+    );
   }
 
   private frontendUrl(): string {

@@ -304,6 +304,7 @@ export class AuthService {
       avatar:
         (await this.storageService.resolveDownloadUrl(user.avatarUrl)) ?? '',
       hasPassword: user.passwordHash !== null,
+      assignmentNotificationEmails: user.assignmentNotificationEmails,
       createdAt: user.createdAt.toISOString().slice(0, 10),
       updatedAt: user.updatedAt.toISOString().slice(0, 10),
     };

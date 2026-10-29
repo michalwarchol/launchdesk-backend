@@ -34,6 +34,9 @@ export class AuthUserDto {
   hasPassword!: boolean;
 
   @Expose()
+  assignmentNotificationEmails!: boolean;
+
+  @Expose()
   @IsoDate()
   createdAt!: string;
 

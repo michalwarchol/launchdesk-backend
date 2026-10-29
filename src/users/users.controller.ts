@@ -17,6 +17,7 @@ import { PaginationQueryDto } from '../common/dto/pagination.dto.js';
 import {
   ChangePasswordDto,
   CreateUserDto,
+  UpdateNotificationPreferencesDto,
   UpdateProfileDto,
   UpdateUserDto,
 } from './dto/user.dto.js';
@@ -39,6 +40,15 @@ export class UsersController {
   @Roles(...MANAGER_ROLES, UserRole.User)
   updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(user, dto);
+  }
+
+  @Patch('me/notifications')
+  @Roles(...MANAGER_ROLES, UserRole.User)
+  updateNotificationPreferences(
+    @CurrentUser() user: User,
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
+    return this.usersService.updateNotificationPreferences(user, dto);
   }
 
   @Post('me/change-password')
