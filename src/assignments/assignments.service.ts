@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 
@@ -11,6 +11,8 @@ import {
   PaginationQueryDto,
 } from '../common/dto/pagination.dto.js';
 import { StorageService } from '../storage/storage.service.js';
+import { MailService } from '../mail/mail.service.js';
+import { Organization } from '../organizations/entities/organization.entity.js';
 import { TaskStep } from '../tasks/entities/task-step.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { MANAGER_ROLES, User } from '../users/entities/user.entity.js';
@@ -44,6 +46,8 @@ interface AssignmentQuery extends PaginationQueryDto {
 
 @Injectable()
 export class AssignmentsService {
+  private readonly logger = new Logger(AssignmentsService.name);
+
   constructor(
     @InjectRepository(Assignment)
     private readonly assignmentsRepository: Repository<Assignment>,
@@ -59,7 +63,10 @@ export class AssignmentsService {
     private readonly taskStepsRepository: Repository<TaskStep>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(Organization)
+    private readonly organizationsRepository: Repository<Organization>,
     private readonly storageService: StorageService,
+    private readonly mailService: MailService,
   ) {}
 
   async findAll(
@@ -272,6 +279,19 @@ export class AssignmentsService {
       ),
     );
 
+    const organization = await this.organizationsRepository.findOne({
+      where: { id: user.organizationId },
+    });
+
+    await this.notifyNewAssignees({
+      assignmentId: assignment.id,
+      dueDate: dto.dueDate,
+      taskName: task.name,
+      organizationName: organization?.name ?? '',
+      assigner: user,
+      recipients: assignees,
+    });
+
     return this.findOne(assignment.id, user.organizationId);
   }
 
@@ -310,6 +330,10 @@ export class AssignmentsService {
       }
 
       if (dto.assigneeIds !== undefined) {
+        const previousAssigneeIds = new Set(
+          assignment.assignees.map((assignee) => assignee.userId),
+        );
+
         const assignees = await this.usersRepository.find({
           where: {
             id: In(dto.assigneeIds),
@@ -332,6 +356,32 @@ export class AssignmentsService {
         );
         await this.deleteCompletionsExcept(id, dto.assigneeIds);
         await this.refreshCompletedAt(id);
+
+        const newlyAdded = assignees.filter(
+          (assignee) => !previousAssigneeIds.has(assignee.id),
+        );
+
+        if (newlyAdded.length > 0) {
+          const [organization, task] = await Promise.all([
+            this.organizationsRepository.findOne({
+              where: { id: currentUser.organizationId },
+            }),
+            this.tasksRepository.findOne({
+              where: { id: assignment.taskId },
+            }),
+          ]);
+
+          const dueDateForMail = dto.dueDate ?? assignment.dueDate;
+
+          await this.notifyNewAssignees({
+            assignmentId: id,
+            dueDate: dueDateForMail,
+            taskName: task?.name ?? '',
+            organizationName: organization?.name ?? '',
+            assigner: currentUser,
+            recipients: newlyAdded,
+          });
+        }
       }
     }
 
@@ -753,6 +803,40 @@ export class AssignmentsService {
       assignmentId,
       userId: Not(In(userIds)),
     });
+  }
+
+  private async notifyNewAssignees(params: {
+    assignmentId: string;
+    dueDate: string;
+    taskName: string;
+    organizationName: string;
+    assigner: User;
+    recipients: User[];
+  }): Promise<void> {
+    const assignerName =
+      `${params.assigner.firstName} ${params.assigner.lastName}`.trim();
+
+    for (const recipient of params.recipients) {
+      if (!recipient.assignmentNotificationEmails) {
+        continue;
+      }
+
+      try {
+        await this.mailService.sendAssignmentAssignedEmail(recipient.email, {
+          firstName: recipient.firstName,
+          assignerName,
+          organizationName: params.organizationName,
+          taskName: params.taskName,
+          dueDate: params.dueDate,
+          assignmentId: params.assignmentId,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Failed to send assignment notification to ${recipient.email}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
   }
 }
 

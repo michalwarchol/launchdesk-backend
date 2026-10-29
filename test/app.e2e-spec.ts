@@ -65,6 +65,7 @@ describe('LaunchDesk API (e2e)', () => {
     expect(response.body.email).toBe(adminEmail);
     expect(response.body.organizationName).toBe('E2E Org');
     expect(response.body.isLastOwner).toBe(true);
+    expect(response.body.assignmentNotificationEmails).toBe(true);
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -124,6 +125,11 @@ describe('LaunchDesk API (e2e)', () => {
   });
 
   it('creates and lists assignments as admin', async () => {
+    const mail = app.get(MailService);
+    const assignmentMailSpy = vi
+      .spyOn(mail, 'sendAssignmentAssignedEmail')
+      .mockResolvedValue(undefined);
+
     const usersResponse = await request(app.getHttpServer())
       .get('/api/users')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -145,6 +151,165 @@ describe('LaunchDesk API (e2e)', () => {
 
     assignmentId = createResponse.body.id;
     expect(createResponse.body.taskName).toBe('E2E Task');
+    expect(assignmentMailSpy).toHaveBeenCalledTimes(1);
+    expect(assignmentMailSpy).toHaveBeenCalledWith(
+      adminEmail,
+      expect.objectContaining({
+        assignmentId: createResponse.body.id,
+        taskName: 'E2E Task',
+        dueDate: '2026-12-31',
+      }),
+    );
+
+    assignmentMailSpy.mockRestore();
+  });
+
+  it('skips assignment notification emails when the assignee opted out', async () => {
+    const mail = app.get(MailService);
+    const assignmentMailSpy = vi
+      .spyOn(mail, 'sendAssignmentAssignedEmail')
+      .mockResolvedValue(undefined);
+
+    await request(app.getHttpServer())
+      .patch('/api/users/me/notifications')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assignmentNotificationEmails: false })
+      .expect(200);
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/api/assignments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        taskId,
+        assigneeIds: [
+          (
+            await request(app.getHttpServer())
+              .get('/api/auth/me')
+              .set('Authorization', `Bearer ${adminToken}`)
+              .expect(200)
+          ).body.id,
+        ],
+        dueDate: '2026-12-30',
+      })
+      .expect(201);
+
+    expect(assignmentMailSpy).not.toHaveBeenCalled();
+
+    await request(app.getHttpServer())
+      .patch('/api/users/me/notifications')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assignmentNotificationEmails: true })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .delete(`/api/assignments/${createResponse.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(204);
+
+    assignmentMailSpy.mockRestore();
+  });
+
+  it('sends assignment notification emails only to newly added assignees on update', async () => {
+    const mail = app.get(MailService);
+    let inviteToken = '';
+    const inviteSpy = vi
+      .spyOn(mail, 'sendInviteEmail')
+      .mockImplementation(async (_email, token) => {
+        inviteToken = token;
+      });
+    const assignmentMailSpy = vi
+      .spyOn(mail, 'sendAssignmentAssignedEmail')
+      .mockResolvedValue(undefined);
+
+    const memberEmail = `e2e-notify-${Date.now()}@example.com`;
+
+    await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        firstName: 'Notify',
+        lastName: 'Member',
+        email: memberEmail,
+        role: 'user',
+      })
+      .expect(201);
+
+    inviteSpy.mockRestore();
+
+    const acceptResponse = await request(app.getHttpServer())
+      .post('/api/auth/invite/accept')
+      .send({ token: inviteToken, password: 'password123' })
+      .expect(201);
+
+    const memberId = acceptResponse.body.user.id as string;
+
+    const adminMe = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const adminId = adminMe.body.id as string;
+
+    const notifyTask = await request(app.getHttpServer())
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Notify task',
+        description: 'Assignment notification update test',
+        steps: [
+          {
+            name: 'Step 1',
+            description: '<p>Step body</p>',
+            attachmentIds: [],
+          },
+        ],
+      })
+      .expect(201);
+
+    assignmentMailSpy.mockClear();
+
+    const assignment = await request(app.getHttpServer())
+      .post('/api/assignments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        taskId: notifyTask.body.id,
+        assigneeIds: [adminId],
+        dueDate: '2026-10-01',
+      })
+      .expect(201);
+
+    expect(assignmentMailSpy).toHaveBeenCalledTimes(1);
+    expect(assignmentMailSpy).toHaveBeenCalledWith(
+      adminEmail,
+      expect.any(Object),
+    );
+
+    assignmentMailSpy.mockClear();
+
+    await request(app.getHttpServer())
+      .patch(`/api/assignments/${assignment.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        assigneeIds: [adminId, memberId],
+        dueDate: '2026-10-15',
+      })
+      .expect(200);
+
+    expect(assignmentMailSpy).toHaveBeenCalledTimes(1);
+    expect(assignmentMailSpy).toHaveBeenCalledWith(
+      memberEmail,
+      expect.objectContaining({
+        assignmentId: assignment.body.id,
+        dueDate: '2026-10-15',
+        taskName: 'Notify task',
+      }),
+    );
+
+    assignmentMailSpy.mockRestore();
+
+    await request(app.getHttpServer())
+      .delete(`/api/assignments/${assignment.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(204);
   });
 
   it('returns dashboard stats', async () => {

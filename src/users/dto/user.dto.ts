@@ -1,4 +1,12 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 import { UserRole } from '../entities/user.entity.js';
 
@@ -46,6 +54,11 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   avatar?: string;
+}
+
+export class UpdateNotificationPreferencesDto {
+  @IsBoolean()
+  assignmentNotificationEmails!: boolean;
 }
 
 export class ChangePasswordDto {

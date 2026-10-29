@@ -61,6 +61,9 @@ export class User {
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.Invited })
   status!: UserStatus;
 
+  @Column({ type: 'boolean', default: true })
+  assignmentNotificationEmails!: boolean;
+
   @Column({ type: 'uuid' })
   organizationId!: string;
 
