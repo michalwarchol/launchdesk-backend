@@ -23,6 +23,7 @@ import {
 import { AssignmentResponseDto } from './dto/assignment-response.dto.js';
 import { MyAssignmentResponseDto } from './dto/my-assignment-response.dto.js';
 import { MyTaskDetailDto } from './dto/my-task-detail.dto.js';
+import { MyAssignmentsQueryDto } from './dto/my-assignments.dto.js';
 import { AssignmentAssignee } from './entities/assignment-assignee.entity.js';
 import { AssignmentStepCompletion } from './entities/assignment-step-completion.entity.js';
 import { AssignmentStepNote } from './entities/assignment-step-note.entity.js';
@@ -147,9 +148,10 @@ export class AssignmentsService {
 
   async findMine(
     userId: string,
-    query: PaginationQueryDto,
+    query: MyAssignmentsQueryDto,
     organizationId: string,
   ): Promise<PaginatedResponse<MyAssignmentResponseDto>> {
+    const search = query.search ? `%${query.search}%` : '%';
     const assignments = await this.assignmentsRepository
       .createQueryBuilder('assignment')
       .innerJoinAndSelect('assignment.task', 'task')
@@ -160,6 +162,7 @@ export class AssignmentsService {
         { userId },
       )
       .where('assignment.organizationId = :organizationId', { organizationId })
+      .andWhere('LOWER(task.name) LIKE :search', { search: search.toLowerCase() })
       .getMany();
     const derived = await this.progressByAssignment(assignments);
     const rank = { overdue: 0, inProgress: 1, notStarted: 2, completed: 3 } as const;

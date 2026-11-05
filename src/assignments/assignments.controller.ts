@@ -26,6 +26,7 @@ import {
   SetStepCompletionDto,
   UpdateAssignmentDto,
 } from './dto/assignment.dto.js';
+import { MyAssignmentsQueryDto } from './dto/my-assignments.dto.js';
 import { AssignmentsService } from './assignments.service.js';
 
 class AssignmentQueryDto extends PaginationQueryDto {
@@ -56,7 +57,7 @@ export class AssignmentsController {
 
   @Get('me')
   @Roles(...MANAGER_ROLES, UserRole.User)
-  findMine(@CurrentUser() user: User, @Query() query: PaginationQueryDto) {
+  findMine(@CurrentUser() user: User, @Query() query: MyAssignmentsQueryDto) {
     return this.assignmentsService.findMine(
       user.id,
       query,
